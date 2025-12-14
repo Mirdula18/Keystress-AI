@@ -25,7 +25,7 @@ from src.feature_engineering import extract_typing_features
 from src.predict import predict_burnout, get_prediction_details, BURNOUT_LABELS
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
 
 # Global model and scaler (loaded on startup)
 model = None
@@ -786,7 +786,7 @@ def api_predict():
     
     except Exception as e:
         print(f"Prediction error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'An error occurred while processing your request'}), 500
 
 
 @app.route('/api/health')

@@ -11,9 +11,8 @@ Prediction Output:
 """
 
 import os
-import pickle
 import numpy as np
-from typing import Dict, Union, Tuple
+from typing import Dict, Tuple
 
 # Import local modules
 from .train_model import FEATURE_COLUMNS
@@ -49,16 +48,15 @@ def load_trained_model(model_path: str = 'models/burnout_model.pkl',
     Returns:
         tuple: (model, scaler)
     """
+    import joblib
+    
     if not os.path.exists(model_path) or not os.path.exists(scaler_path):
         raise FileNotFoundError(
             "Trained model not found. Please run train_model.py first."
         )
     
-    with open(model_path, 'rb') as f:
-        model = pickle.load(f)
-    
-    with open(scaler_path, 'rb') as f:
-        scaler = pickle.load(f)
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
     
     return model, scaler
 

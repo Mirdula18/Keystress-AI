@@ -12,7 +12,6 @@ Model Output:
 """
 
 import os
-import pickle
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -24,7 +23,8 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import StandardScaler
 import warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 
 # Feature columns used for training
@@ -188,13 +188,11 @@ def save_model(model, scaler, model_path: str = 'models/burnout_model.pkl',
         model_path: Path to save model
         scaler_path: Path to save scaler
     """
+    import joblib
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
     
-    with open(model_path, 'wb') as f:
-        pickle.dump(model, f)
-    
-    with open(scaler_path, 'wb') as f:
-        pickle.dump(scaler, f)
+    joblib.dump(model, model_path)
+    joblib.dump(scaler, scaler_path)
     
     print(f"Model saved to {model_path}")
     print(f"Scaler saved to {scaler_path}")
@@ -212,11 +210,9 @@ def load_model(model_path: str = 'models/burnout_model.pkl',
     Returns:
         tuple: (model, scaler)
     """
-    with open(model_path, 'rb') as f:
-        model = pickle.load(f)
-    
-    with open(scaler_path, 'rb') as f:
-        scaler = pickle.load(f)
+    import joblib
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
     
     return model, scaler
 
