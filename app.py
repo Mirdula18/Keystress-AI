@@ -806,9 +806,12 @@ if __name__ == '__main__':
     # Load models
     load_models()
     
+    # Get debug mode from environment (default: False for security)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    
     print("\n🚀 Starting Flask server...")
     print("📍 Open http://127.0.0.1:5000 in your browser")
     print("⚡ Press Ctrl+C to stop the server")
     print("=" * 50 + "\n")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
