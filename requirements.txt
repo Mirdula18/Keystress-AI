@@ -1,0 +1,13 @@
+# Keystress-AI Requirements
+# Privacy-preserving burnout detection through typing behavior analysis
+
+# Core dependencies
+numpy>=1.21.0
+pandas>=1.3.0
+scikit-learn>=1.0.0
+
+# Web framework
+flask>=2.0.0
+
+# Development (optional)
+pytest>=7.0.0
