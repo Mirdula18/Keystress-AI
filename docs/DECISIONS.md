@@ -302,3 +302,52 @@ no interpolated content.
 
 **Consequences.** `web/index.html` is not directly openable in a browser as a file, since the two
 `url_for` expressions need rendering. Acceptable: the page cannot function without the API anyway.
+
+---
+
+## D-014 — The privacy test is verified by injecting a leak, not by passing
+
+**Phase 0 · F12 · `feat/F12-tests-and-privacy`**
+
+**Context.** `tests/test_privacy.py` asserts the project's central guarantee. A privacy test that
+passes tells you nothing on its own — a test asserting `True is True` also passes.
+
+**Decision.** Validate the suite by mutation: temporarily add a content leak
+(`"keys_typed": [e.get("key") for e in keystroke_events]` to the session record), confirm the suite
+fails, then revert. Recorded here so the verification is repeatable rather than a one-off.
+
+**Result.** Three independent tests caught it — the response-shape allowlist, the
+identical-timing/different-content equivalence test, and the source-level scan. Independent detection
+matters: a single guard can be defeated by a change that routes around it, three cannot easily be.
+
+**Rationale.** The guarantee is the product. Evidence that the guard fires beats evidence that it is
+silent. The three-layer structure is deliberate: shape assertions catch new keys, equivalence tests
+catch content influencing output through any path, and source scanning catches the code being written
+before it has an effect.
+
+**Consequences.** Re-run the mutation whenever the privacy test changes shape. If a future change
+makes only one layer fire, the other two have been weakened and should be investigated.
+
+---
+
+## D-015 — Broad `except Exception` at the deserialisation boundary
+
+**Phase 0 · F12 · `feat/F12-tests-and-privacy`**
+
+**Context.** `load_bundle` originally caught
+`(OSError, ValueError, EOFError, AttributeError, ImportError)`. A test feeding it a corrupt artifact
+showed a real `IndexError` escaping from `pickle.pop_mark` as a raw traceback — a HARD RULE 6
+violation that only appeared because the test existed.
+
+**Decision.** Catch `Exception` at that one call site, log the concrete type, and re-raise as
+`ModelUnavailableError` with the original chained.
+
+**Rationale.** `docs/CLAUDE.md` §6 forbids a *bare* `except`; this is not one, and it is confined to a
+single deserialisation call. Enumerating every way a corrupt pickle can fail is a losing game — the
+narrow tuple was already wrong, and the next unpickling bug would be a new escape. The correct rule at
+this boundary is that no artifact problem may reach a user as a stack trace. Nothing is hidden: the
+exception type is logged and the original is chained.
+
+**Consequences.** A genuine bug inside a well-formed artifact's deserialisation is reported as
+"model unavailable" rather than crashing. Acceptable — from the user's position the model is in fact
+unavailable, and the operator gets the real exception in the log.

@@ -165,9 +165,19 @@ def load_bundle(model_path: Path, scaler_path: Path, metadata_path: Path) -> Mod
     try:
         estimator = joblib.load(model_path)
         scaler = joblib.load(scaler_path)
-    except (OSError, ValueError, EOFError, AttributeError, ImportError) as exc:
-        # A corrupt or version-incompatible artifact must not surface as a stack trace.
-        logger.error("Failed to deserialise model artifacts: %s", exc)
+    except Exception as exc:  # noqa: BLE001 - deliberate; see below
+        # Deliberately broad, and not a bare `except`.
+        #
+        # Unpickling a corrupt or truncated file raises essentially anything: the
+        # narrower `(OSError, ValueError, EOFError, AttributeError, ImportError)` tuple
+        # tried first here let a real `IndexError` from `pickle.pop_mark` escape as a raw
+        # traceback, which `tests/test_core.py::test_corrupt_artifact_raises_clean_error`
+        # caught. Enumerating pickle's failure modes is a losing game; at a
+        # deserialisation boundary the correct rule is that *no* artifact problem may
+        # escape as a stack trace (HARD RULE 6). The original is chained and logged, so
+        # nothing is hidden from an operator.
+        logger.error("Failed to deserialise model artifacts: %s: %s",
+                     type(exc).__name__, exc)
         raise ModelUnavailableError(
             "The trained model could not be loaded; it may be corrupt or built by an "
             "incompatible scikit-learn version. Retrain with `keystress-train`."

@@ -142,3 +142,36 @@ Entries reference the feature IDs in [`docs/FEATURES.md`](docs/FEATURES.md).
 #### Notes
 - The two CDN `<link>` tags (Google Fonts, Font Awesome) were carried across unchanged. Removing
   them is F16; doing it here would have made this change more than behaviour-preserving.
+
+---
+
+### F12 — Test suite including a dedicated privacy test
+
+#### Added
+- **`tests/test_privacy.py` (26 tests)** asserting the project's central guarantee across three
+  independent layers: response and session-metadata key allowlists; equivalence tests proving that
+  sessions differing only in typed content produce byte-identical output; and source-level scans
+  ensuring no core module reads a content-bearing field and the frontend stores a boolean rather
+  than a key. Hostile payloads carrying `key`, `char`, `code`, `keyCode`, `text`, `clipboard`,
+  `window`, and `url` are pushed through the full HTTP round-trip and asserted to vanish.
+  **Verified by injecting a real leak and confirming three tests fail** (D-014).
+- `tests/test_core.py` (66 tests) — collection, features, model loading, inference, disclosure
+  helpers, and CLI formatting.
+- `tests/test_ml.py` (41 tests) — synthetic generation, training, versioning, metadata. Includes
+  explicit regression tests for the clamp point-mass defect, so it becomes a build failure rather
+  than something noticed years later.
+- `tests/test_api.py` (36 tests) — payload validation, error paths, the app factory, configuration,
+  and static asset serving.
+- `pytest` `privacy` marker so the privacy suite can be run and enforced independently in CI.
+
+#### Fixed
+- **Corrupt model artifacts no longer escape as a stack trace.** A corrupt pickle raises `IndexError`
+  from inside `pickle.pop_mark`, which the original narrow exception tuple did not catch — found by
+  the new test, not by inspection. Now handled at the deserialisation boundary and reported as a
+  clean 503 (HARD RULE 6, D-015).
+
+#### Notes
+- 265 tests; 92% statement coverage overall, 93-100% across every `core/` and `api/` module.
+- Tests never read the real `models/` directory. `conftest.py` builds an in-memory `ModelBundle`, so
+  results do not depend on whether a developer has run training — a hidden disk dependency that one
+  test did have until it was caught and fixed.
