@@ -72,3 +72,47 @@ Entries reference the feature IDs in [`docs/FEATURES.md`](docs/FEATURES.md).
 - **Default bind changed from `0.0.0.0` to `127.0.0.1`** (HARD RULE 5), overridable via
   `KEYSTRESS_HOST` with a warning on non-loopback addresses. Pulled forward from F3 because the
   code contradicted its own startup message (D-006).
+
+---
+
+### F11 — Kill fragile patterns: imports, globals, packaging
+
+#### Added
+- **Real installable package.** `pyproject.toml` with `pip install -e .`, console scripts
+  `keystress` and `keystress-train`, and ruff/pytest configuration. Layout follows
+  `ARCHITECTURE.md` §3: `keystress/{api,core,ml,web}` (D-008).
+- `keystress/core/model.py` — immutable `ModelBundle` (estimator + scaler + metadata) and a
+  `ModelRegistry` that swaps bundles atomically. Injectable through `create_app()`, which is what
+  makes the API testable without a trained artifact on disk (D-009).
+- `keystress/config.py` — environment-driven settings with loopback-by-default binding and paths
+  resolved relative to the project root rather than the working directory.
+- `keystress/app.py` — `create_app()` application factory; blueprints in `keystress/api/`.
+- `/readyz` readiness endpoint, distinct from liveness: it reports whether a prediction can actually
+  be served.
+- Server-side input validation on `/api/predict`: payload shape, event-count bounds, and numeric
+  timestamps, with clear 400s instead of a 500.
+
+#### Changed
+- **Removed the `sys.path` manipulation** (`app.py:18`) — imports now resolve through the package.
+- **Removed module-level mutable model state.** The `model`/`scaler` globals and `load_models()`
+  are gone (D-009).
+- **`print` replaced with `logging`** throughout; all emoji removed from output. Emoji in log lines
+  raise `UnicodeEncodeError` on legacy Windows console codepages, turning a cosmetic banner into a
+  startup crash.
+- **Removed the unused `LogisticRegression` import** together with `train_logistic_regression()`,
+  the dead function that was its only referent.
+- `src/` replaced by `keystress/` using `git mv`, preserving per-file history. No compatibility
+  shim (D-008).
+- Minimum Python raised to 3.9; 3.8 is end-of-life (D-011).
+- README rewritten with the real layout, working commands, and the configuration table.
+
+#### Fixed
+- **The synthetic generator no longer creates artificial point masses.** `max(floor, x)` clamping
+  collapsed ~2.3% of one class onto exactly `0.01` and ~3% of another onto exactly `0.5` — a
+  generator artifact a tree model can split on to score well for the wrong reason. Replaced with
+  rejection sampling; verified 1500/1500 distinct values with none at either floor. The
+  data-generating process is now versioned (`g2`) and appears in every model identity (D-010).
+- Model artifacts that are missing or corrupt now produce a clear 503 and a degraded `/readyz`
+  rather than a stack trace or a startup crash (HARD RULE 6).
+- `TypingSession` switched from wall-clock `time.time()` to `time.monotonic()`, and accepts an
+  injected timestamp so tests need not sleep.

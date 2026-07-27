@@ -1,15 +1,15 @@
-# Keystress-AI Requirements
-# Privacy-preserving burnout detection through typing behavior analysis
+# Keystress-AI runtime requirements
+#
+# The authoritative dependency declaration is `pyproject.toml`. This file is kept for
+# convenience and mirrors it. Prefer:
+#
+#     pip install -e .           # runtime
+#     pip install -e ".[dev]"    # runtime + test/lint tooling
+#
+# Reproducible, fully pinned installs come from `requirements-lock.txt` (F13).
 
-# Core dependencies
 numpy>=1.21.0
 pandas>=1.3.0
 scikit-learn>=1.0.1
 joblib>=1.2.0
-
-
-# Web framework
 flask>=2.3.2
-
-# Development (optional)
-pytest>=7.0.0
