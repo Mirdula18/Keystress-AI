@@ -1,0 +1,42 @@
+# Fully pinned dependency set for reproducible installs (F13).
+#
+# `pyproject.toml` declares lower bounds so the package stays usable in other
+# environments. This file pins exact versions so CI, and anyone reproducing a model
+# build, resolves an identical dependency graph.
+#
+#     pip install -r requirements-lock.txt
+#
+# Why the pins matter here specifically: scikit-learn's estimators can change fitting
+# details between minor versions, so an unpinned upgrade can silently change what a
+# "reproducible" model build produces. Pinning makes that a deliberate, reviewable bump
+# rather than a surprise on a Tuesday.
+#
+# Verified against Python 3.11 on 2026-07-27.
+# Regenerate with: pip freeze (then prune to the transitive set below).
+
+# --- direct runtime dependencies ---
+flask==3.0.2
+joblib==1.5.2
+numpy==1.26.4
+pandas==2.2.3
+scikit-learn==1.8.0
+
+# --- transitive: flask ---
+blinker==1.9.0
+click==8.3.1
+itsdangerous==2.2.0
+jinja2==3.1.4
+markupsafe==3.0.3
+werkzeug==3.1.8
+
+# --- transitive: scikit-learn / pandas ---
+python-dateutil==2.9.0.post0
+pytz==2024.2
+scipy==1.17.1
+six==1.17.0
+threadpoolctl==3.6.0
+tzdata==2024.2
+
+# --- development tooling ---
+pytest==8.4.2
+ruff==0.15.20

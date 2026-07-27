@@ -351,3 +351,85 @@ exception type is logged and the original is chained.
 **Consequences.** A genuine bug inside a well-formed artifact's deserialisation is reported as
 "model unavailable" rather than crashing. Acceptable — from the user's position the model is in fact
 unavailable, and the operator gets the real exception in the log.
+
+---
+
+## D-016 — Training is single-threaded, because `n_jobs=-1` is not reproducible
+
+**Phase 0 · F13 · `feat/F13-ci-and-pinning`**
+
+**Context.** The inherited trainer used `RandomForestClassifier(..., n_jobs=-1)`. The new
+reproducibility check failed: two builds with identical seeds produced models whose `predict_proba`
+differed on one probe row.
+
+**Investigation.** Parallel fitting varies floating-point accumulation order, so `random_state` alone
+does not pin the result. Measured directly — six refits with `n_jobs=-1` produced six different
+probability arrays; with `n_jobs=1`, all six were byte-identical. The divergence is in *fitting*, not
+prediction: repeated `predict_proba` calls on one fitted model always agreed.
+
+**Decision.** Set `n_jobs=1` for training.
+
+**Rationale.** Two things were at stake, and neither is worth 0.37 seconds:
+
+1. F13 requires that a clean checkout reproduce the same synthetic model. With `n_jobs=-1` that
+   claim was simply false — and would have been shipped as true had the check not existed.
+2. The confidence figure shown to a user would vary between otherwise identical runs. Tiny, but this
+   project presents uncertainty as a feature; that number should not wobble for reasons unrelated to
+   the input.
+
+Measured cost of the full 1500-sample fit at `n_jobs=1`: 0.371s.
+
+**Consequences.** Training does not use multiple cores. Irrelevant at this scale. If the dataset ever
+grows by orders of magnitude, the trade-off should be re-examined and recorded here — not silently
+reversed for speed.
+
+---
+
+## D-017 — Reproducibility is defined behaviourally, not as byte-identical artifacts
+
+**Phase 0 · F13 · `feat/F13-ci-and-pinning`**
+
+**Context.** The obvious implementation of "reproducible model builds" is to hash the `.pkl` files and
+compare. Joblib artifacts can differ between runs for reasons unrelated to the model — memory layout,
+serialisation ordering, library build details.
+
+**Decision.** `tools/check_reproducible_build.py` builds twice in separate temporary directories and
+compares: the SHA-256 of the generated dataset (byte-exact), predictions and full class probabilities
+on a fixed seven-point probe set spanning the feature space (exact float equality), the reported
+metrics, and the model version string.
+
+**Rationale.** Byte comparison of pickles fails both ways: false alarms from irrelevant differences,
+and — more dangerous — a green result that says nothing about whether the model behaves the same.
+Behavioural equivalence is both stricter where it matters and stable where it does not. The dataset
+*is* compared byte-exactly, because that is where a seeding regression appears first and there is no
+excuse for it to vary.
+
+**Consequences.** Two models that behave identically but serialise differently pass, which is the
+intended semantics. A test asserting that *different* seeds produce *different* builds guards against
+the check trivially passing.
+
+---
+
+## D-018 — CI verifies that its own guards can fail
+
+**Phase 0 · F13 · `feat/F13-ci-and-pinning`**
+
+**Context.** The CI pipeline enforces two guarantees that are otherwise invisible: no content capture,
+and no unqualified metrics. Both are enforced by code that could itself be broken, disabled, or
+emptied — and in every one of those cases CI would stay green.
+
+**Decision.** Each guard job proves the guard is live:
+
+- **honesty**: runs the metric checker against a known-bad fixture and fails if it passes.
+- **privacy**: injects a real content leak into the privacy boundary, requires the suite to fail,
+  restores the file, and then runs `git diff --exit-code` to confirm the tree was restored.
+- **privacy** additionally relies on `TestSuiteIntegrity` inside the suite, which fails if the number
+  of privacy tests drops — because a suite collecting zero tests passes.
+
+**Rationale.** A green check that cannot go red is worse than no check: it manufactures confidence.
+For a project whose two headline claims are "we never capture content" and "every metric states its
+source", the guards deserve the same scepticism as the code.
+
+**Consequences.** The privacy job mutates a tracked file during the run. It is confined to a
+throwaway CI checkout, restored immediately, and the restoration is verified — but anyone reading the
+workflow should understand it is deliberate. The suite-size floor must be raised as tests are added.
