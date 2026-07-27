@@ -390,3 +390,38 @@ class TestSourceLevelGuarantees:
                     f"{name} performs I/O ({pattern}); raw timing data must not be "
                     "persisted before the F2 consent flow exists"
                 )
+
+
+class TestSuiteIntegrity:
+    """
+    Guard the guard.
+
+    A test suite that collects zero tests passes. Without this, the privacy guarantee
+    could be silently removed by deleting its tests rather than by breaking them — which
+    would look identical in a green CI run.
+    """
+
+    #: Floor on the number of privacy assertions. Raise it when tests are added; lowering
+    #: it should require explaining which guarantee is being given up.
+    MINIMUM_PRIVACY_TESTS = 25
+
+    def test_suite_has_not_been_emptied(self) -> None:
+        import sys
+
+        module = sys.modules[__name__]
+        count = sum(
+            1
+            for obj in vars(module).values()
+            if inspect.isclass(obj) and obj.__name__.startswith("Test")
+            for name in vars(obj)
+            if name.startswith("test_")
+        )
+        assert count >= self.MINIMUM_PRIVACY_TESTS, (
+            f"Only {count} privacy tests found, expected at least "
+            f"{self.MINIMUM_PRIVACY_TESTS}. The no-content-capture guarantee must not be "
+            "weakened by deleting the tests that verify it."
+        )
+
+    def test_every_privacy_test_carries_the_marker(self) -> None:
+        """`pytestmark` applies the marker module-wide; CI selects on it."""
+        assert pytestmark.name == "privacy"

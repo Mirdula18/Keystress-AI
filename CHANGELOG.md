@@ -175,3 +175,34 @@ Entries reference the feature IDs in [`docs/FEATURES.md`](docs/FEATURES.md).
 - Tests never read the real `models/` directory. `conftest.py` builds an in-memory `ModelBundle`, so
   results do not depend on whether a developer has run training — a hidden disk dependency that one
   test did have until it was caught and fixed.
+
+---
+
+### F13 — CI, dependency pinning, and reproducible builds
+
+#### Added
+- `.github/workflows/ci.yml` with six jobs, each mapping to a Phase 0 exit criterion:
+  `lint`, `test` (Python 3.9-3.12 matrix), `privacy`, `honesty`, `reproducible`, and `install`
+  (Ubuntu + Windows, proving `pip install -e .` works and the package imports without the old
+  `sys.path` hack).
+- **CI verifies its own guards can fail** (D-018): the honesty job runs the metric checker against a
+  known-bad fixture and fails if it passes; the privacy job injects a real content leak, requires the
+  suite to catch it, restores the file, and confirms the restoration with `git diff --exit-code`.
+- `tools/check_reproducible_build.py` — builds twice from scratch in separate directories and
+  compares the dataset digest, predictions, full class probabilities, metrics, and model version
+  (D-017).
+- `requirements-lock.txt` — fully pinned dependency set. Pinning scikit-learn matters specifically
+  here: estimator internals can change between minor versions, so an unpinned upgrade could silently
+  change what a "reproducible" build produces.
+- `TestSuiteIntegrity` in the privacy suite, failing if the number of privacy tests drops — a suite
+  that collects zero tests otherwise passes.
+- Reproducibility tests running a smaller build comparison locally, including one asserting that
+  *different* seeds produce *different* builds, so the check cannot trivially pass.
+
+#### Fixed
+- **Model builds were not actually reproducible.** `RandomForestClassifier(n_jobs=-1)` made fitting
+  non-deterministic at float precision even with `random_state` fixed: six refits produced six
+  different probability arrays. Found by the new reproducibility check, not by inspection — the
+  project would have shipped a false reproducibility claim. Training is now single-threaded, at a
+  measured cost of 0.371s for the full 1500-sample fit (D-016). This also stops the confidence figure
+  shown to a user from varying between otherwise identical runs.
