@@ -338,3 +338,55 @@ class TestEndToEndTraining:
                    metadata=None, metadata_path=metadata_path)
 
         assert not metadata_path.exists()
+
+
+class TestReproducibility:
+    """
+    Reproducible builds (F13).
+
+    The CI job runs the full check; these run a smaller version so a seeding regression
+    fails locally before it reaches a pull request.
+    """
+
+    def test_two_builds_agree(self, tmp_path) -> None:
+        from tools.check_reproducible_build import build_once, compare
+
+        first = build_once(tmp_path / "a", 42, 300)
+        second = build_once(tmp_path / "b", 42, 300)
+
+        failures = compare(first, second)
+        assert not failures, "builds diverged:\n" + "\n".join(failures)
+
+    def test_different_seeds_produce_different_builds(self, tmp_path) -> None:
+        """Confirms the check compares something real rather than trivially passing."""
+        from tools.check_reproducible_build import build_once, compare
+
+        first = build_once(tmp_path / "a", 42, 300)
+        second = build_once(tmp_path / "b", 7, 300)
+
+        assert compare(first, second), "different seeds should not produce identical builds"
+
+    def test_probe_predictions_are_stable_across_reloads(self, tmp_path) -> None:
+        """A saved and reloaded model must behave identically to the in-memory one."""
+        import numpy as np
+
+        from keystress.core.model import load_bundle
+        from tools.check_reproducible_build import PROBE_FEATURES
+
+        data_path = save_synthetic_data(
+            generate_synthetic_typing_data(n_samples=300, random_state=21),
+            tmp_path / "data.csv",
+        )
+        paths = (tmp_path / "m.pkl", tmp_path / "s.pkl", tmp_path / "meta.json")
+        results = train_and_evaluate(
+            data_path=data_path, model_path=paths[0],
+            scaler_path=paths[1], metadata_path=paths[2], random_state=21,
+        )
+
+        probe = np.array(PROBE_FEATURES)
+        in_memory = results["model"].predict(results["scaler"].transform(probe))
+
+        bundle = load_bundle(*paths)
+        reloaded = bundle.estimator.predict(bundle.scaler.transform(probe))
+
+        assert in_memory.tolist() == reloaded.tolist()

@@ -1,0 +1,217 @@
+name: CI
+
+# Every job here maps to a Phase 0 exit criterion. A merge that breaks any of them breaks
+# a stated guarantee of the project, so none of these are advisory.
+#
+#   lint         - code quality
+#   test         - correctness across supported Python versions
+#   privacy      - the no-content-capture guarantee (docs/CLAUDE.md HARD RULE 1)
+#   honesty      - no unqualified metric anywhere (HARD RULE 3)
+#   reproducible - a clean checkout rebuilds the same synthetic model
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONHASHSEED: "0"   # keeps hash-order effects out of build comparisons
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-lock.txt
+          pip install -e .
+
+      - name: Ruff
+        run: ruff check keystress tools tests
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run test suite
+        run: pytest -v
+
+  privacy:
+    name: Privacy guarantee
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-lock.txt
+          pip install -e .
+
+      # Run separately from the main suite so a privacy failure is unmissable in the
+      # checks list rather than buried among hundreds of dots.
+      #
+      # The "suite has not been emptied" guard lives inside the suite itself
+      # (TestSuiteIntegrity) rather than as shell parsing here: a suite that collects zero
+      # tests passes, so the guarantee could otherwise be removed by deleting tests rather
+      # than by breaking them, and that would look identical in a green run.
+      - name: No content may be captured or returned
+        run: pytest -m privacy -v
+
+      - name: The privacy suite must itself be able to fail
+        # Injects a content leak into the privacy boundary and requires the suite to
+        # catch it. Without this, a green privacy job proves only that the tests ran.
+        run: |
+          cp keystress/core/collect.py /tmp/collect.py.bak
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("keystress/core/collect.py")
+          s = p.read_text(encoding="utf-8")
+          leak = '        "keys_typed": [e.get("key") for e in keystroke_events],\n'
+          marker = '        "total_keys": len(timestamps),\n'
+          assert marker in s, "could not locate the session record to mutate"
+          p.write_text(s.replace(marker, leak + marker, 1), encoding="utf-8")
+          PY
+          if pytest -m privacy -q; then
+            cp /tmp/collect.py.bak keystress/core/collect.py
+            echo "::error::The privacy suite passed against a deliberately leaking build."
+            exit 1
+          fi
+          cp /tmp/collect.py.bak keystress/core/collect.py
+          echo "Confirmed: the privacy suite detects a content leak."
+
+      - name: Confirm the working tree was restored
+        run: git diff --exit-code
+
+  honesty:
+    name: Honest metrics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-lock.txt
+          pip install -e .
+
+      - name: No unqualified metrics anywhere
+        run: python tools/check_metric_qualifiers.py
+
+      - name: The metric check must itself be able to fail
+        # Proves the guard is live. If the checker ever passes its own known-bad
+        # fixture, it has been broken or neutered and is protecting nothing.
+        run: |
+          if python tools/check_metric_qualifiers.py \
+               tests/fixtures/metric_check/bad_unqualified.md; then
+            echo "::error::The metric checker accepted a known-bad fixture."
+            exit 1
+          fi
+          echo "Confirmed: the checker rejects unqualified metrics."
+
+  reproducible:
+    name: Reproducible model build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-lock.txt
+          pip install -e .
+
+      - name: Two clean builds must agree
+        run: python tools/check_reproducible_build.py --seed 42
+
+      - name: Build the shipped model and publish its metadata
+        run: |
+          python -m keystress.ml.synthetic
+          python -m keystress.ml.train
+
+      - name: Show model provenance
+        run: |
+          echo "Model metadata (note data_source):"
+          cat models/model_metadata.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-metadata
+          path: models/model_metadata.json
+          if-no-files-found: error
+
+  install:
+    name: Package installs cleanly
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # The inherited app relied on a sys.path hack and only worked from the repository
+      # root. This proves the package is importable and runnable as an installed package.
+      - name: pip install -e .
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Import and entrypoints resolve
+        run: |
+          python -c "import keystress; print('keystress', keystress.__version__)"
+          python -c "from keystress.app import create_app; create_app(load_model=False); print('app factory OK')"
