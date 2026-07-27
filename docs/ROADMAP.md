@@ -13,22 +13,27 @@ second agent, you are also the reviewer — hold your own PRs to the Definition 
 
 The project currently overstates itself and can't be tested. Fix both.
 
-- [ ] **Repo + path audit.** Map real layout vs `CLAUDE.md §3`. Note the inline-HTML boundary,
+- [x] **Repo + path audit.** Map real layout vs `CLAUDE.md §3`. Note the inline-HTML boundary,
       `sys.path` use, and global model state. Initialize git properly (history is empty today).
-- [ ] **F1 — Honest metrics.** Add `data_source`/`disclaimer`/`model_version` to the response;
+- [x] **F1 — Honest metrics.** Add `data_source`/`disclaimer`/`model_version` to the response;
       strip every unqualified accuracy claim from README/UI; add the metric-qualifier check.
-- [ ] **F11 — Kill fragile patterns.** Package layout + `pyproject.toml`; model loader replaces
+- [x] **F11 — Kill fragile patterns.** Package layout + `pyproject.toml`; model loader replaces
       globals; remove `sys.path` hack, unused `LogisticRegression`, emoji prints; fix the
       `typing_consistency` clamp; switch to `logging`.
-- [ ] **F10 — Extract the frontend** from the Python string into `web/` (behavior-preserving;
+- [x] **F10 — Extract the frontend** from the Python string into `web/` (behavior-preserving;
       characterization test first).
-- [ ] **F12 — Test suite + privacy test.** Cover core modules and add `test_privacy.py` asserting
+- [x] **F12 — Test suite + privacy test.** Cover core modules and add `test_privacy.py` asserting
       no content data survives anywhere.
-- [ ] **F13 — CI + pinning + reproducible builds.** Actions run lint/tests/privacy/metric checks;
+- [x] **F13 — CI + pinning + reproducible builds.** Actions run lint/tests/privacy/metric checks;
       pin deps; seed synthetic gen + training.
 
 **Exit criteria:** no unqualified metric anywhere; app is a proper installable package with no
 inline HTML or global model state; privacy test green in CI; synthetic model builds reproducibly.
+
+> **Phase 0 complete.** All five exit criteria verified — see `CHANGELOG.md` and `docs/DECISIONS.md`
+> (D-001 … D-018). 274 tests, 92% statement coverage. Three real defects were found by the new
+> checks rather than by inspection: a non-reproducible model build (`n_jobs=-1`), a corrupt-artifact
+> crash path, and a backtracking flaw in the metric checker itself.
 
 ---
 
