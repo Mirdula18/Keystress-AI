@@ -162,3 +162,94 @@ Accepted: `tests/test_metric_qualifiers.py` asserts against known-bad fixtures s
 able to fail, and the residual gap is narrower than the false-positive noise the broad version
 created. Documents that legitimately quote the removed claims (`docs/AUDIT.md` §5) carry explicit
 exception markers.
+
+---
+
+## D-008 — `src/` replaced outright by the `keystress/` package, no compatibility shim
+
+**Phase 0 · F11 · `feat/F11-package-and-loader`**
+
+**Context.** F11 requires a real installable package. The inherited `src/` was not a package in any
+meaningful sense — it was importable only because `app.py` inserted the repository root into
+`sys.path` at line 18.
+
+**Decision.** Move every module into `keystress/` with `git mv` (preserving file history), delete
+`src/`, and ship no deprecation shim.
+
+**Rationale.** A shim exists to protect external importers, and there are none: the project is
+pre-release, nothing depends on `src.*`, and the only in-repo consumer was `app.py` itself. Adding a
+shim would mean writing dead code on day one and then needing a second commit to remove it. `git mv`
+keeps `git log --follow` working, so the history argument for a gentle transition does not apply.
+
+**Consequences.** Any external snippet doing `from src.predict import ...` breaks immediately rather
+than deprecating. Given zero known consumers, an immediate clear break beats a silent shim.
+
+---
+
+## D-009 — Model state moved into an injectable registry, not a module singleton
+
+**Phase 0 · F11 · `feat/F11-package-and-loader`**
+
+**Context.** The inherited app kept `model` and `scaler` as module-level globals, mutated by
+`load_models()` and read by two request handlers. This made the app untestable without touching disk,
+allowed a half-loaded state (model assigned, scaler not), and hid model identity from the response.
+
+**Decision.** Introduce an immutable `ModelBundle` (estimator + scaler + metadata, frozen) held by a
+`ModelRegistry` that swaps bundles atomically under a lock. The registry is attached to
+`app.extensions` and can be injected into `create_app()`.
+
+**Rationale.** Binding the estimator, scaler, and metadata into one frozen object makes the
+partially-loaded state unrepresentable, and means a prediction can never be served without knowing
+its data source — the exact failure F1 exists to prevent. Injection through the app factory is what
+makes the API testable with a fixture model instead of a trained artifact, which the whole F12 test
+suite depends on.
+
+**Consequences.** Model access is now `current_app.extensions["keystress_registry"]` rather than a
+bare import. Slightly more ceremony at the call site, in exchange for testability and an
+unrepresentable broken state.
+
+---
+
+## D-010 — The synthetic generator now resamples instead of clamping (g1 → g2)
+
+**Phase 0 · F11 · `feat/F11-package-and-loader`**
+
+**Context.** The inherited generator bounded out-of-range draws with `max(floor, x)`. That does not
+truncate a distribution — it piles every rejected draw onto one exact value. Measured on the
+inherited generator: roughly 2.3% of the low-burnout class sat on exactly `0.01` for
+`typing_consistency`, and about 3% of the high-burnout class on exactly `0.5` for `avg_typing_speed`.
+
+**Decision.** Replace clamping with rejection sampling (`_truncated_normal`), scale the Beta-drawn
+`backspace_ratio` rather than clipping it, and tag the data-generating process
+`SYNTHETIC_GENERATOR_VERSION = "g2"`, recorded in every model version string
+(`rf-v1-synthetic-g2-s42-n1500`).
+
+**Rationale.** A point mass is a generator artifact a tree model can split on directly, letting it
+score well by detecting the author's clamp rather than any pattern. In a project whose central
+problem is already that synthetic scores overstate real capability, leaving an artifact that
+*further* inflates them is the worst available option. Verified after the change: 1500/1500 distinct
+values, none at either floor.
+
+**Consequences.** The synthetic distribution changed, so models built before and after are not
+comparable and prior artifacts must be regenerated. The generator version in the model identity makes
+that visible rather than silent. Switching to `np.random.default_rng` also changes the random stream,
+so seed 42 no longer reproduces the old dataset — intended, and the reason the version tag exists.
+
+---
+
+## D-011 — Minimum Python raised from 3.8 to 3.9
+
+**Phase 0 · F11 · `feat/F11-package-and-loader`**
+
+**Context.** `docs/CLAUDE.md` §4 states "Python 3.8+ (target 3.11)". Python 3.8 reached end of life in
+October 2024 and receives no security fixes.
+
+**Decision.** Set `requires-python = ">=3.9"` in `pyproject.toml`.
+
+**Rationale.** Shipping a stated floor on an unsupported interpreter is a security position the
+project cannot defend, particularly one handling data it describes as sensitive. 3.9 is the lowest
+still-supported version. This is a deliberate, minimal deviation from the brief rather than an
+oversight.
+
+**Consequences.** Divergence from `CLAUDE.md` §4, recorded here rather than by silently editing the
+brief. Should be reconciled when that document is next revised.

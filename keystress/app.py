@@ -1,67 +1,139 @@
 """
-Keystress-AI: Flask Web Application
+Keystress-AI Flask application factory.
 
-A privacy-preserving research prototype that examines whether typing rhythm relates to
+A privacy-preserving research prototype examining whether typing rhythm relates to
 academic wellbeing. It produces research *indicators*, not assessments or diagnoses.
-
-This application provides:
-- A UI for recording a typing session
-- Keystroke metadata collection (timing and correction flags only, never content)
-- A burnout risk *indicator* with its data source and uncertainty attached
-- Privacy-first design (no content storage)
 
 The served model is trained on synthetic data whose classes were hand-authored by the
 generator, so every number it produces is labelled ``data_source: "synthetic"`` and means
 only that. See ``docs/CLAUDE.md`` §1.
+
+Structure
+---------
+This module is a thin entrypoint: it builds the app, wires the model registry, and
+registers the API blueprints. Request handling lives in ``keystress.api``, and the
+domain logic in ``keystress.core``. There is no module-level mutable model state — the
+registry attached to ``app.extensions`` owns the loaded model (F11).
+
+The page markup below is still an inline string. Extracting it into ``web/`` is F10, the
+next feature; it is left untouched here so that change stays behaviour-preserving and
+independently reviewable.
 """
 
-import os
-import sys
+from __future__ import annotations
 
-# Add src to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import logging
 
-from flask import Flask, render_template, request, jsonify
-import numpy as np
+from flask import Flask
 
-# Import local modules
-from src.feature_engineering import extract_typing_features
-from src.predict import predict_burnout, get_prediction_details, BURNOUT_LABELS
+from .config import Settings, load_settings
+from .core.model import ModelRegistry, ModelUnavailableError
 
-app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
-
-# Global model and scaler (loaded on startup)
-model = None
-scaler = None
+logger = logging.getLogger(__name__)
 
 
-def load_models():
-    """Load trained model and scaler on startup."""
-    global model, scaler
+def configure_logging(level: str = "INFO") -> None:
+    """
+    Configure application logging.
+
+    Replaces the inherited ``print`` calls (F11). Emoji are deliberately absent: they
+    raise ``UnicodeEncodeError`` on legacy Windows console codepages, which turned a
+    cosmetic banner into a startup crash.
+
+    Parameters:
+        level: Log level name; an unrecognised value falls back to INFO.
+    """
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
+def ensure_model(registry: ModelRegistry, settings: Settings) -> None:
+    """
+    Load the model, training one from synthetic data if none exists.
+
+    Parameters:
+        registry: The registry to populate.
+        settings: Resolved settings supplying artifact paths.
+
+    Note:
+        A failure here is logged and swallowed rather than raised. The app must still
+        start so that ``/api/health`` and ``/readyz`` can report the degraded state —
+        HARD RULE 6 asks for a clear message, and a process that refuses to boot cannot
+        deliver one.
+    """
     try:
-        from src.predict import load_trained_model
-        model, scaler = load_trained_model()
-        print("Model loaded successfully")
-    except FileNotFoundError:
-        print("Model not found. Running training first...")
-        from src.train_model import train_and_evaluate
-        from src.generate_synthetic_data import generate_synthetic_typing_data, save_synthetic_data
-        
-        # Generate data if not exists
-        if not os.path.exists('data/synthetic_typing_data.csv'):
-            print("Generating synthetic data...")
-            df = generate_synthetic_typing_data(n_samples=1500)
-            save_synthetic_data(df)
-        
-        # Train model
-        results = train_and_evaluate()
-        model = results['model']
-        scaler = results['scaler']
-        print("Model trained and loaded")
+        registry.load(settings.model_path, settings.scaler_path, settings.metadata_path)
+        return
+    except ModelUnavailableError as exc:
+        logger.warning("%s", exc)
+
+    if not settings.auto_train:
+        logger.error("No model available and auto-training is disabled")
+        return
+
+    logger.info("Training a model from synthetic data (this happens once)")
+    try:
+        from .ml.synthetic import generate_synthetic_typing_data, save_synthetic_data
+        from .ml.train import train_and_evaluate
+
+        if not settings.data_path.exists():
+            save_synthetic_data(
+                generate_synthetic_typing_data(n_samples=1500), settings.data_path
+            )
+
+        train_and_evaluate(
+            data_path=settings.data_path,
+            model_path=settings.model_path,
+            scaler_path=settings.scaler_path,
+            metadata_path=settings.metadata_path,
+        )
+        registry.load(settings.model_path, settings.scaler_path, settings.metadata_path)
+    except (ModelUnavailableError, FileNotFoundError, ValueError, OSError) as exc:
+        logger.error("Could not train a model: %s. Predictions will be unavailable.", exc)
 
 
-# HTML template as a string (for self-contained app)
+def create_app(settings: Settings | None = None,
+               registry: ModelRegistry | None = None,
+               load_model: bool = True) -> Flask:
+    """
+    Build the Flask application.
+
+    Parameters:
+        settings: Configuration; read from the environment when omitted.
+        registry: Model registry to use. Injectable so tests can supply a fixture model
+            without touching disk — the thing the inherited module globals made impossible.
+        load_model: Whether to load or train a model at startup.
+
+    Returns:
+        Flask: The configured application.
+    """
+    settings = settings if settings is not None else load_settings()
+    registry = registry if registry is not None else ModelRegistry()
+
+    app = Flask(__name__)
+    app.config["KEYSTRESS_SETTINGS"] = settings
+    app.extensions["keystress_registry"] = registry
+
+    from .api.health import bp as health_bp
+    from .api.predict import bp as predict_bp
+
+    app.register_blueprint(predict_bp)
+    app.register_blueprint(health_bp)
+
+    @app.route("/")
+    def index() -> str:
+        """Render the single-page application."""
+        return HTML_TEMPLATE
+
+    if load_model and not registry.is_loaded:
+        ensure_model(registry, settings)
+
+    return app
+
+
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -833,101 +905,35 @@ HTML_TEMPLATE = '''
 '''
 
 
-@app.route('/')
-def index():
-    """Render the main application page."""
-    return HTML_TEMPLATE
-
-
-@app.route('/api/predict', methods=['POST'])
-def api_predict():
+def main() -> int:
     """
-    API endpoint for burnout prediction.
-    
-    Expects JSON with 'keystroke_events' containing list of
-    {timestamp, is_backspace} objects.
-    
-    Returns JSON with prediction results.
+    Run the development server.
+
+    Returns:
+        int: Process exit code.
     """
-    global model, scaler
-    
-    try:
-        data = request.get_json()
-        
-        if not data or 'keystroke_events' not in data:
-            return jsonify({'error': 'No keystroke data provided'}), 400
-        
-        keystroke_events = data['keystroke_events']
-        
-        if len(keystroke_events) < 5:
-            return jsonify({'error': 'Insufficient keystroke data'}), 400
-        
-        # Process keystroke data to extract features
-        from src.collect_typing_data import process_keystroke_data
-        session_data = process_keystroke_data(keystroke_events)
-        
-        # Extract typing features
-        features = extract_typing_features(session_data)
-        
-        # Get prediction. The response carries data_source, model_version, disclaimer,
-        # and insufficient_data by construction (see src/predict.py).
-        result = get_prediction_details(features, model=model, scaler=scaler)
+    settings = load_settings()
+    configure_logging(settings.log_level)
 
-        # Determine level class for styling. An absent prediction (insufficient signal)
-        # must not fall back to 'low' — that would style a non-result as a reassuring one.
-        level_classes = {0: 'low', 1: 'medium', 2: 'high'}
-        result['level_class'] = level_classes.get(result['prediction'], 'unknown')
+    logger.info("Keystress-AI: typing-dynamics research prototype")
+    logger.info(
+        "Research indicators only - not a diagnostic tool. The shipped model is "
+        "trained on synthetic data; no real-world performance has been established."
+    )
 
-        return jsonify(result)
-    
-    except Exception as e:
-        print(f"Prediction error: {e}")
-        return jsonify({'error': 'An error occurred while processing your request'}), 500
+    app = create_app(settings)
+
+    if not settings.is_loopback:
+        # HARD RULE 5: local-first. A wider bind is allowed but never silent.
+        logger.warning(
+            "Bound to %s, which may be reachable from your network. Raw keystroke "
+            "timing is sensitive; prefer 127.0.0.1.", settings.host,
+        )
+
+    logger.info("Serving on http://%s:%d", settings.host, settings.port)
+    app.run(debug=settings.debug, host=settings.host, port=settings.port)
+    return 0
 
 
-@app.route('/api/health')
-def health_check():
-    """
-    Health check endpoint.
-
-    Reports which model is loaded and what data it was trained on, so an operator can
-    never be unsure whether a running instance is serving synthetic-trained predictions.
-    """
-    from src.predict import load_model_metadata
-
-    metadata = load_model_metadata()
-    return jsonify({
-        'status': 'healthy',
-        'model_loaded': model is not None,
-        'model_version': metadata.get('model_version', 'unknown'),
-        'data_source': metadata.get('data_source', 'unknown'),
-        'feature_set': metadata.get('feature_set', 'unknown'),
-    })
-
-
-if __name__ == '__main__':
-    print("\n" + "=" * 72)
-    print("KEYSTRESS-AI: typing-dynamics research prototype")
-    print("Research indicators only - not a diagnostic tool. Model trained on")
-    print("synthetic data; no real-world performance has been established.")
-    print("=" * 72)
-
-    # Load models
-    load_models()
-
-    # Get debug mode from environment (default: False for security)
-    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
-
-    # Local-first (docs/CLAUDE.md HARD RULE 5): bind loopback only. Exposing this to a
-    # network is an explicit opt-in, never the default. Full config handling is F3/F14.
-    host = os.environ.get('KEYSTRESS_HOST', '127.0.0.1')
-    port = int(os.environ.get('KEYSTRESS_PORT', '5000'))
-
-    print(f"\nStarting Flask development server on http://{host}:{port}")
-    if host not in ('127.0.0.1', 'localhost', '::1'):
-        print(f"WARNING: bound to {host}, which may be reachable from your network.")
-        print("         Raw keystroke timing is sensitive data - prefer 127.0.0.1.")
-    print("Press Ctrl+C to stop the server")
-    print("=" * 72 + "\n")
-
-    app.run(debug=debug_mode, host=host, port=port)
+if __name__ == "__main__":
+    raise SystemExit(main())
