@@ -131,7 +131,7 @@ inputs.
 {
   "prediction": 1,
   "label": "Medium (indicator)",
-  "confidence": 0.62,               // calibrated (F-series), not raw max-proba
+  "confidence": 0.62,               // calibrated (F-series), not raw max-proba. metrics-ok: schema example value, not a measured result
   "probabilities": [0.20, 0.62, 0.18],
   "description": "...",
   "data_source": "synthetic",       // REQUIRED: "synthetic" until real validation exists

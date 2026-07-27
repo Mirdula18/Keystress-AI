@@ -1,14 +1,18 @@
 """
 Keystress-AI: Flask Web Application
 
-A privacy-preserving burnout detection system that analyzes
-typing behavior patterns to assess academic stress levels.
+A privacy-preserving research prototype that examines whether typing rhythm relates to
+academic wellbeing. It produces research *indicators*, not assessments or diagnoses.
 
 This application provides:
-- A modern, responsive UI for typing tests
-- Real-time keystroke metadata collection
-- AI-powered burnout risk assessment
+- A UI for recording a typing session
+- Keystroke metadata collection (timing and correction flags only, never content)
+- A burnout risk *indicator* with its data source and uncertainty attached
 - Privacy-first design (no content storage)
+
+The served model is trained on synthetic data whose classes were hand-authored by the
+generator, so every number it produces is labelled ``data_source: "synthetic"`` and means
+only that. See ``docs/CLAUDE.md`` §1.
 """
 
 import os
@@ -38,9 +42,9 @@ def load_models():
     try:
         from src.predict import load_trained_model
         model, scaler = load_trained_model()
-        print("✓ Model loaded successfully")
+        print("Model loaded successfully")
     except FileNotFoundError:
-        print("⚠ Model not found. Running training first...")
+        print("Model not found. Running training first...")
         from src.train_model import train_and_evaluate
         from src.generate_synthetic_data import generate_synthetic_typing_data, save_synthetic_data
         
@@ -54,7 +58,7 @@ def load_models():
         results = train_and_evaluate()
         model = results['model']
         scaler = results['scaler']
-        print("✓ Model trained and loaded")
+        print("Model trained and loaded")
 
 
 # HTML template as a string (for self-contained app)
@@ -404,6 +408,42 @@ HTML_TEMPLATE = '''
             line-height: 1.5;
         }
 
+        /* Research-status banner (F1: the synthetic caveat is not fine print) */
+        .research-banner {
+            border-left: 5px solid var(--warning);
+            padding: 1.25rem 1.5rem;
+        }
+
+        .research-banner p {
+            font-size: 0.9rem;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+
+        /* Data-source note attached to every displayed metric */
+        .source-note {
+            margin-top: 1.25rem;
+            padding: 0.875rem 1rem;
+            background: #f8fafc;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            color: var(--gray);
+            line-height: 1.5;
+        }
+
+        .disclaimer-notice {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border-color: #fcd34d;
+        }
+
+        .disclaimer-notice i {
+            color: var(--warning);
+        }
+
+        .disclaimer-notice p {
+            color: #78350f;
+        }
+
         /* Footer */
         .footer {
             text-align: center;
@@ -466,14 +506,21 @@ HTML_TEMPLATE = '''
     <div class="container">
         <header class="header">
             <h1><i class="fas fa-brain"></i> Keystress-AI</h1>
-            <p>Detect academic burnout through typing patterns</p>
+            <p>A research prototype exploring whether typing rhythm relates to academic wellbeing</p>
         </header>
+
+        <div class="card research-banner">
+            <p><strong>Research prototype, not a burnout test.</strong> The model behind this page
+            was trained on <strong>synthetic data</strong> whose burnout categories were written by
+            hand in the data generator. It has never been tested against real burnout, so it cannot
+            tell you whether you are burned out, and nothing here is a medical assessment.</p>
+        </div>
 
         <!-- Typing Test Card -->
         <div class="card" id="test-card">
             <div class="card-header">
                 <i class="fas fa-keyboard"></i>
-                <h2>Typing Test</h2>
+                <h2>Typing Session</h2>
             </div>
 
             <div class="typing-prompt">
@@ -507,7 +554,7 @@ HTML_TEMPLATE = '''
                     <i class="fas fa-redo"></i> Reset
                 </button>
                 <button class="btn btn-primary" id="analyze-btn" onclick="analyzeTyping()" disabled>
-                    <i class="fas fa-chart-line"></i> Analyze Burnout Risk
+                    <i class="fas fa-chart-line"></i> Analyze Typing Session
                 </button>
             </div>
 
@@ -529,19 +576,17 @@ HTML_TEMPLATE = '''
                 <div class="result-icon" id="result-icon">
                     <i class="fas fa-check"></i>
                 </div>
-                <div class="result-level" id="result-level">Low Burnout</div>
-                <div class="result-confidence" id="result-confidence">Confidence: 85%</div>
+                <div class="result-level" id="result-level"></div>
+                <div class="result-confidence" id="result-confidence"></div>
             </div>
 
-            <div class="result-description" id="result-description">
-                Your typing patterns indicate healthy, consistent behavior.
-            </div>
+            <div class="result-description" id="result-description"></div>
 
-            <div class="probability-section">
-                <h3>Risk Assessment Breakdown</h3>
+            <div class="probability-section" id="probability-section">
+                <h3 id="probability-heading">Indicator breakdown</h3>
                 <div class="probability-bar low">
                     <div class="label">
-                        <span>Low Burnout</span>
+                        <span id="label-low">Low (indicator)</span>
                         <span id="prob-low">0%</span>
                     </div>
                     <div class="bar">
@@ -550,7 +595,7 @@ HTML_TEMPLATE = '''
                 </div>
                 <div class="probability-bar medium">
                     <div class="label">
-                        <span>Medium Burnout</span>
+                        <span id="label-medium">Medium (indicator)</span>
                         <span id="prob-medium">0%</span>
                     </div>
                     <div class="bar">
@@ -559,7 +604,7 @@ HTML_TEMPLATE = '''
                 </div>
                 <div class="probability-bar high">
                     <div class="label">
-                        <span>High Burnout</span>
+                        <span id="label-high">High (indicator)</span>
                         <span id="prob-high">0%</span>
                     </div>
                     <div class="bar">
@@ -568,15 +613,17 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
 
+            <div class="source-note" id="source-note"></div>
+
             <div class="btn-group">
                 <button class="btn btn-primary" onclick="newTest()">
-                    <i class="fas fa-redo"></i> Take Another Test
+                    <i class="fas fa-redo"></i> Run Another Session
                 </button>
             </div>
 
-            <div class="privacy-notice">
+            <div class="privacy-notice disclaimer-notice">
                 <i class="fas fa-info-circle"></i>
-                <p><strong>Disclaimer:</strong> This tool provides an estimate based on typing patterns and is not a medical diagnosis. If you're experiencing burnout, please consult a healthcare professional or counselor.</p>
+                <p><strong>Disclaimer:</strong> <span id="disclaimer-text"></span></p>
             </div>
         </div>
 
@@ -654,7 +701,7 @@ HTML_TEMPLATE = '''
 
         function analyzeTyping() {
             if (keystrokeData.length < 20) {
-                alert('Please type more (at least 20 keystrokes) for accurate analysis.');
+                alert('Please type at least 20 keystrokes - shorter sessions carry too little timing signal to analyze.');
                 return;
             }
 
@@ -690,15 +737,48 @@ HTML_TEMPLATE = '''
             });
         }
 
+        // Human-readable qualifier for a data_source value. Every number rendered on this
+        // page passes through here — an unqualified metric should be impossible to display.
+        function sourceQualifier(dataSource) {
+            if (dataSource === 'real') { return 'on real validated data'; }
+            if (dataSource === 'synthetic') { return 'on synthetic data'; }
+            return 'on data of unknown origin';
+        }
+
         function displayResults(result) {
             // Hide loader, show results
             document.getElementById('loader-card').classList.remove('show');
             document.getElementById('results-card').classList.add('show');
 
-            // Update result icon
+            const dataSource = result.data_source || 'unknown';
+            const qualifier = sourceQualifier(dataSource);
+            const modelVersion = result.model_version || 'unknown';
+
+            document.getElementById('disclaimer-text').textContent = result.disclaimer || '';
+
             const icon = document.getElementById('result-icon');
+            const levelEl = document.getElementById('result-level');
+            const probabilitySection = document.getElementById('probability-section');
+            const sourceNote = document.getElementById('source-note');
+
+            // Insufficient signal: say so plainly rather than rendering an invented score.
+            if (result.insufficient_data) {
+                icon.className = 'result-icon medium';
+                icon.innerHTML = '<i class="fas fa-question"></i>';
+                levelEl.textContent = result.label;
+                levelEl.className = 'result-level medium';
+                document.getElementById('result-confidence').textContent = '';
+                document.getElementById('result-description').textContent = result.description;
+                probabilitySection.style.display = 'none';
+                sourceNote.textContent =
+                    'No indicator was produced, so there is no number to report. '
+                    + 'Model ' + modelVersion + ' (trained ' + qualifier + ').';
+                return;
+            }
+
+            probabilitySection.style.display = 'block';
+
             icon.className = 'result-icon ' + result.level_class;
-            
             const iconMap = {
                 'low': 'fa-check',
                 'medium': 'fa-exclamation',
@@ -706,26 +786,40 @@ HTML_TEMPLATE = '''
             };
             icon.innerHTML = '<i class="fas ' + iconMap[result.level_class] + '"></i>';
 
-            // Update level and confidence
-            const levelEl = document.getElementById('result-level');
             levelEl.textContent = result.label;
             levelEl.className = 'result-level ' + result.level_class;
 
-            document.getElementById('result-confidence').textContent = 
-                'Confidence: ' + (result.confidence * 100).toFixed(0) + '%';
+            // Confidence never appears without its source. It is also a raw model score,
+            // not a calibrated probability — F7 addresses that; until then we say so.
+            document.getElementById('result-confidence').textContent =
+                'Model confidence: ' + (result.confidence * 100).toFixed(0) + '% '
+                + '(uncalibrated, ' + qualifier + ')';
 
-            // Update description
             document.getElementById('result-description').textContent = result.description;
 
-            // Update probability bars
+            // Probabilities are ordered by class index (ARCHITECTURE.md 4.3); labels come
+            // from the response so the page never hard-codes them.
             const probs = result.probabilities;
-            document.getElementById('prob-low').textContent = (probs['Low Burnout'] * 100).toFixed(0) + '%';
-            document.getElementById('prob-medium').textContent = (probs['Medium Burnout'] * 100).toFixed(0) + '%';
-            document.getElementById('prob-high').textContent = (probs['High Burnout'] * 100).toFixed(0) + '%';
+            const labels = result.labels || ['Low (indicator)', 'Medium (indicator)', 'High (indicator)'];
+            const slots = ['low', 'medium', 'high'];
 
-            document.getElementById('bar-low').style.width = (probs['Low Burnout'] * 100) + '%';
-            document.getElementById('bar-medium').style.width = (probs['Medium Burnout'] * 100) + '%';
-            document.getElementById('bar-high').style.width = (probs['High Burnout'] * 100) + '%';
+            document.getElementById('probability-heading').textContent =
+                'Indicator breakdown (' + qualifier + ')';
+
+            slots.forEach(function (slot, i) {
+                document.getElementById('label-' + slot).textContent = labels[i];
+                document.getElementById('prob-' + slot).textContent = (probs[i] * 100).toFixed(0) + '%';
+                document.getElementById('bar-' + slot).style.width = (probs[i] * 100) + '%';
+            });
+
+            sourceNote.textContent =
+                'Every percentage above was produced by model ' + modelVersion
+                + ', trained ' + qualifier + '. '
+                + (dataSource === 'synthetic'
+                    ? 'The training categories were defined by hand in the data generator, '
+                      + 'so these numbers describe how separable those authored categories are '
+                      + '- not any demonstrated ability to detect real burnout.'
+                    : '');
         }
 
         function newTest() {
@@ -775,13 +869,15 @@ def api_predict():
         # Extract typing features
         features = extract_typing_features(session_data)
         
-        # Get prediction
+        # Get prediction. The response carries data_source, model_version, disclaimer,
+        # and insufficient_data by construction (see src/predict.py).
         result = get_prediction_details(features, model=model, scaler=scaler)
-        
-        # Determine level class for styling
+
+        # Determine level class for styling. An absent prediction (insufficient signal)
+        # must not fall back to 'low' — that would style a non-result as a reassuring one.
         level_classes = {0: 'low', 1: 'medium', 2: 'high'}
-        result['level_class'] = level_classes.get(result['prediction'], 'low')
-        
+        result['level_class'] = level_classes.get(result['prediction'], 'unknown')
+
         return jsonify(result)
     
     except Exception as e:
@@ -791,27 +887,47 @@ def api_predict():
 
 @app.route('/api/health')
 def health_check():
-    """Health check endpoint."""
+    """
+    Health check endpoint.
+
+    Reports which model is loaded and what data it was trained on, so an operator can
+    never be unsure whether a running instance is serving synthetic-trained predictions.
+    """
+    from src.predict import load_model_metadata
+
+    metadata = load_model_metadata()
     return jsonify({
         'status': 'healthy',
-        'model_loaded': model is not None
+        'model_loaded': model is not None,
+        'model_version': metadata.get('model_version', 'unknown'),
+        'data_source': metadata.get('data_source', 'unknown'),
+        'feature_set': metadata.get('feature_set', 'unknown'),
     })
 
 
 if __name__ == '__main__':
-    print("\n" + "=" * 50)
-    print("🧠 KEYSTRESS-AI: Academic Burnout Detection")
-    print("=" * 50)
-    
+    print("\n" + "=" * 72)
+    print("KEYSTRESS-AI: typing-dynamics research prototype")
+    print("Research indicators only - not a diagnostic tool. Model trained on")
+    print("synthetic data; no real-world performance has been established.")
+    print("=" * 72)
+
     # Load models
     load_models()
-    
+
     # Get debug mode from environment (default: False for security)
     debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
-    
-    print("\n🚀 Starting Flask server...")
-    print("📍 Open http://127.0.0.1:5000 in your browser")
-    print("⚡ Press Ctrl+C to stop the server")
-    print("=" * 50 + "\n")
-    
-    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
+
+    # Local-first (docs/CLAUDE.md HARD RULE 5): bind loopback only. Exposing this to a
+    # network is an explicit opt-in, never the default. Full config handling is F3/F14.
+    host = os.environ.get('KEYSTRESS_HOST', '127.0.0.1')
+    port = int(os.environ.get('KEYSTRESS_PORT', '5000'))
+
+    print(f"\nStarting Flask development server on http://{host}:{port}")
+    if host not in ('127.0.0.1', 'localhost', '::1'):
+        print(f"WARNING: bound to {host}, which may be reachable from your network.")
+        print("         Raw keystroke timing is sensitive data - prefer 127.0.0.1.")
+    print("Press Ctrl+C to stop the server")
+    print("=" * 72 + "\n")
+
+    app.run(debug=debug_mode, host=host, port=port)

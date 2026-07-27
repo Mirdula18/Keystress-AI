@@ -107,12 +107,12 @@ Additional defects found during audit, not in the received list:
 |---|---|---|
 | README.md | 10 | "**detects** early academic burnout" |
 | README.md | 35 | "Provides real-time burnout risk assessment" |
-| README.md | 43 | "Random Forest classifier with **85%+ accuracy**" |
-| README.md | 75 | "**~90% accuracy**, balanced precision/recall" |
-| README.md | 196-199 | Performance table: accuracy/precision/recall/F1 all ~90%, unqualified |
+| README.md | 43 | "Random Forest classifier with **85%+ accuracy**" <!-- metrics-ok: quoting the removed claim, not asserting it --> |
+| README.md | 75 | "**~90% accuracy**, balanced precision/recall" <!-- metrics-ok: quoting the removed claim, not asserting it --> |
+| README.md | 196-199 | Performance table: accuracy/precision/recall/F1 all ~90%, unqualified <!-- metrics-ok: quoting the removed claim, not asserting it --> |
 | README.md | 202-206 | Feature-importance ranking presented as established fact |
 | app.py | 469 | UI tagline "**Detect** academic burnout through typing patterns" |
-| app.py | 533 | Hardcoded placeholder "Confidence: 85%" in results markup |
+| app.py | 533 | Hardcoded placeholder "Confidence: 85%" in results markup <!-- metrics-ok: quoting the removed claim, not asserting it --> |
 | app.py | 715 | Renders confidence with no data-source qualifier |
 | app.py | 541 | "Risk Assessment Breakdown" |
 | app.py | 803 | Startup banner "Academic Burnout **Detection**" |
