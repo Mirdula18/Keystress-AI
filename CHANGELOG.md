@@ -206,3 +206,11 @@ Entries reference the feature IDs in [`docs/FEATURES.md`](docs/FEATURES.md).
   project would have shipped a false reproducibility claim. Training is now single-threaded, at a
   measured cost of 0.371s for the full 1500-sample fit (D-016). This also stops the confidence figure
   shown to a user from varying between otherwise identical runs.
+
+#### Fixed (follow-up)
+- **The metric-qualifier checker had a regex backtracking flaw.** Given `0.371s` the engine matched
+  `0.371`, saw the forbidden unit suffix, then gave back a digit to match `0.37` — whose next
+  character is `1`, not a unit — and reported a metric. Any decimal followed by a unit could be
+  partially matched this way. Found when the checker flagged a timing measurement in this very
+  changelog. The fractional part is now anchored so it cannot be shortened, with regression tests
+  covering both the false positive and the real metrics that must still be caught.

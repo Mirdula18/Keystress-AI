@@ -82,11 +82,18 @@ IGNORE_LINE_PATTERNS: tuple[re.Pattern[str], ...] = (
 _UNIT_SUFFIX = r"(?!\s*(?:rem|px|em|ex|ch|vh|vw|vmin|vmax|pt|pc|cm|mm|in|deg|s\b|ms\b))"
 
 #: Unambiguous metric shapes: a percentage, or a decimal in the 0-1 range.
+#:
+#: The `(?![\d.])` after the fractional part is load-bearing. Without it the regex
+#: backtracks around the unit guard: given "0.371s" the engine matches "0.371", sees the
+#: forbidden "s" suffix, then gives back a digit to match "0.37" — whose next character is
+#: "1", not a unit — and reports a metric. Anchoring the fraction so it cannot be
+#: shortened makes the unit exclusion actually hold. Found when the checker flagged a
+#: timing measurement in CHANGELOG.md.
 METRIC_NUMBER = re.compile(
     r"(?<![\w.-])"
     r"(?:"
     r"\d{1,3}(?:\.\d+)?\s*%"           # 90%, 85.5 %
-    r"|0?\.\d+"                         # 0.9013, .90
+    r"|0?\.\d+(?![\d.])"                # 0.9013, .90  - not shortenable
     r")"
     + _UNIT_SUFFIX
 )
