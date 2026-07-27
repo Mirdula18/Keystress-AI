@@ -125,6 +125,11 @@ def prepare_data(df: pd.DataFrame, test_size: float = 0.2,
     return X_train, X_test, y_train, y_test, scaler
 
 
+#: Fit single-threaded. See :func:`train_random_forest` for why this is not a performance
+#: oversight.
+TRAINING_N_JOBS = 1
+
+
 def train_random_forest(X_train: np.ndarray, y_train: np.ndarray,
                         n_estimators: int = 100,
                         random_state: int = 42) -> RandomForestClassifier:
@@ -139,6 +144,26 @@ def train_random_forest(X_train: np.ndarray, y_train: np.ndarray,
 
     Returns:
         RandomForestClassifier: The fitted model.
+
+    Note:
+        ``n_jobs`` is deliberately 1, not -1. The inherited code used ``n_jobs=-1``, which
+        makes fitting **non-deterministic at float precision even with `random_state`
+        fixed**: parallel tree construction varies the floating-point accumulation order,
+        so two runs with identical seeds produce models whose ``predict_proba`` differs in
+        the last bits. Measured directly — six refits with ``n_jobs=-1`` produced six
+        different probability arrays; with ``n_jobs=1`` all six were byte-identical.
+
+        Two reasons this matters more than the lost parallelism:
+
+        1. F13 requires that a clean checkout reproduce the same model. With ``n_jobs=-1``
+           that claim is false, and this was found by the reproducibility check failing.
+        2. The confidence figure shown to a user would vary between otherwise identical
+           runs. Tiny, but this project reports uncertainty as a feature; that number
+           should not wobble for reasons unrelated to the input.
+
+        The cost is negligible at this scale (1500 samples, 100 shallow trees — well under
+        a second). Revisit only if the dataset grows by orders of magnitude, and then
+        record the trade-off rather than silently trading determinism for speed.
     """
     model = RandomForestClassifier(
         n_estimators=n_estimators,
@@ -146,7 +171,7 @@ def train_random_forest(X_train: np.ndarray, y_train: np.ndarray,
         min_samples_split=5,
         min_samples_leaf=2,
         random_state=random_state,
-        n_jobs=-1,
+        n_jobs=TRAINING_N_JOBS,
     )
     model.fit(X_train, y_train)
     return model
