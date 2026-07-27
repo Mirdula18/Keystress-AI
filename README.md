@@ -69,11 +69,54 @@ rigorous, privacy-preserving methodology — not a headline number.
 ## 🏁 Quick start
 
 ```bash
-cp .env.example .env          # after F14
-pip install -e .              # proper package after F11
-python -m keystress.app       # serves on http://127.0.0.1:5000 (localhost by default)
+pip install -e .              # installs the `keystress` package
+python -m keystress           # serves on http://127.0.0.1:5000 (loopback by default)
 ```
+
+On first run, if no model exists, one is trained from synthetic data automatically. To do
+it explicitly:
+
+```bash
+python -m keystress.ml.synthetic    # generate the synthetic dataset
+python -m keystress.ml.train        # train and print a source-labelled evaluation report
+```
+
+Development:
+
+```bash
+pip install -e ".[dev]"
+pytest                                        # tests, including the privacy test
+ruff check keystress tools tests              # lint
+python tools/check_metric_qualifiers.py       # no unqualified metrics anywhere
+```
+
+Configuration (all optional, safe defaults):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `KEYSTRESS_HOST` | `127.0.0.1` | Bind address. Non-loopback values log a warning — raw keystroke timing is sensitive. |
+| `KEYSTRESS_PORT` | `5000` | Bind port. |
+| `KEYSTRESS_DEBUG` | `false` | Flask debug mode. |
+| `KEYSTRESS_LOG_LEVEL` | `INFO` | Application log level. |
+| `KEYSTRESS_AUTO_TRAIN` | `true` | Train from synthetic data at startup when no model is found. |
+
 Docker (after F15): `docker compose up`.
+
+---
+
+## 📁 Layout
+
+```
+keystress/
+├── app.py          # Flask application factory
+├── config.py       # env-driven settings; loopback default
+├── api/            # HTTP layer: predict, health/readyz
+├── core/           # domain: collect (privacy boundary), features, model loader, inference
+├── ml/             # offline: synthetic generation, training  (never on the serving path)
+└── web/            # extracted frontend (F10)
+tools/              # repository checks (metric qualifiers)
+tests/              # unit, API, and privacy tests
+```
 
 ---
 
