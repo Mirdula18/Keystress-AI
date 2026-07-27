@@ -11,7 +11,10 @@ Model Output:
     2 = High Burnout
 """
 
+import json
 import os
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -23,18 +26,25 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import StandardScaler
 import warnings
+
+from .disclosure import (
+    FEATURE_SET_VERSION,
+    FEATURES_V1,
+    SHIPPED_DATA_SOURCE,
+    SYNTHETIC_MODEL_NOTICE,
+    format_metric,
+)
+
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 
-# Feature columns used for training
-FEATURE_COLUMNS = [
-    'avg_typing_speed',
-    'avg_inter_key_delay',
-    'max_pause_duration',
-    'backspace_ratio',
-    'typing_consistency'
-]
+# Feature columns used for training. Sourced from the versioned feature set so that
+# training, inference, and the model metadata can never drift apart silently.
+FEATURE_COLUMNS = list(FEATURES_V1)
+
+#: Sidecar describing what a saved model is and what its metrics actually mean.
+DEFAULT_METADATA_PATH = 'models/model_metadata.json'
 
 
 def load_training_data(filepath: str = 'data/synthetic_typing_data.csv') -> pd.DataFrame:
@@ -177,25 +187,98 @@ def get_feature_importance(model, feature_names: list = None) -> dict:
     return {}
 
 
-def save_model(model, scaler, model_path: str = 'models/burnout_model.pkl',
-               scaler_path: str = 'models/scaler.pkl'):
+def build_model_version(data_source: str, n_samples: int, random_state: int) -> str:
     """
-    Save the trained model and scaler to disk.
-    
+    Build a deterministic model version identifier.
+
+    The identifier is derived only from inputs that determine the model, so an identical
+    training run produces an identical version string. It deliberately contains no
+    timestamp — a clean checkout must be able to reproduce the same version (F13).
+
+    Parameters:
+        data_source: ``"synthetic"`` or ``"real"``.
+        n_samples: Number of training samples.
+        random_state: Seed used for generation, splitting, and fitting.
+
+    Returns:
+        str: e.g. ``"rf-v1-synthetic-s42-n1500"``.
+    """
+    return f"rf-{FEATURE_SET_VERSION}-{data_source}-s{random_state}-n{n_samples}"
+
+
+def build_model_metadata(metrics: dict, n_samples: int, random_state: int,
+                         data_source: str = SHIPPED_DATA_SOURCE) -> dict:
+    """
+    Describe a trained model and, critically, what its metrics mean.
+
+    Every metric this project stores travels with the data source it was measured on.
+    For the shipped model that source is ``"synthetic"``, meaning the scores below
+    describe how separable the hand-authored generator classes are — not real-world
+    burnout detection. See :data:`src.disclosure.SYNTHETIC_MODEL_NOTICE`.
+
+    Parameters:
+        metrics: Evaluation metrics from :func:`evaluate_model`.
+        n_samples: Number of samples in the training dataset.
+        random_state: Seed used throughout the pipeline.
+        data_source: Source of the training data.
+
+    Returns:
+        dict: Registry-shaped metadata (see ``ARCHITECTURE.md`` §4.4).
+    """
+    return {
+        'model_version': build_model_version(data_source, n_samples, random_state),
+        'model_type': 'RandomForestClassifier',
+        'trained_on': data_source,
+        'data_source': data_source,
+        'feature_set': FEATURE_SET_VERSION,
+        'features': list(FEATURE_COLUMNS),
+        'random_seed': random_state,
+        'n_samples': n_samples,
+        'metrics': {
+            'accuracy': float(metrics['accuracy']),
+            'precision_weighted': float(metrics['precision']),
+            'recall_weighted': float(metrics['recall']),
+            'f1_weighted': float(metrics['f1_score']),
+        },
+        # The metrics above are meaningless without this field. Never drop it.
+        'metrics_data_source': data_source,
+        'metrics_caveat': SYNTHETIC_MODEL_NOTICE if data_source == 'synthetic' else '',
+        'created_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+    }
+
+
+def save_model(model, scaler, model_path: str = 'models/burnout_model.pkl',
+               scaler_path: str = 'models/scaler.pkl',
+               metadata: dict = None,
+               metadata_path: str = DEFAULT_METADATA_PATH):
+    """
+    Save the trained model, scaler, and its disclosure metadata to disk.
+
     Parameters:
         model: Trained model
         scaler: Fitted scaler
         model_path: Path to save model
         scaler_path: Path to save scaler
+        metadata: Metadata dict from :func:`build_model_metadata`. Optional only to keep
+            the signature backward compatible; omitting it leaves the served model
+            without a version or data source, which the prediction layer then reports
+            honestly as unknown.
+        metadata_path: Path to save the metadata sidecar
     """
     import joblib
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
-    
+
     joblib.dump(model, model_path)
     joblib.dump(scaler, scaler_path)
-    
+
     print(f"Model saved to {model_path}")
     print(f"Scaler saved to {scaler_path}")
+
+    if metadata is not None:
+        os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+        with open(metadata_path, 'w', encoding='utf-8') as handle:
+            json.dump(metadata, handle, indent=2, sort_keys=True)
+        print(f"Model metadata saved to {metadata_path}")
 
 
 def load_model(model_path: str = 'models/burnout_model.pkl',
@@ -218,64 +301,84 @@ def load_model(model_path: str = 'models/burnout_model.pkl',
 
 
 def train_and_evaluate(data_path: str = 'data/synthetic_typing_data.csv',
-                       save_models: bool = True) -> dict:
+                       save_models: bool = True,
+                       random_state: int = 42,
+                       data_source: str = SHIPPED_DATA_SOURCE) -> dict:
     """
     Complete training pipeline: load data, train model, evaluate, and save.
-    
+
+    Every metric printed or returned by this function carries its data source. For the
+    default synthetic dataset the labels were authored by the generator, so the scores
+    measure class separability of a hand-built distribution rather than any real-world
+    detection ability.
+
     Parameters:
         data_path: Path to training data
         save_models: Whether to save trained models
-        
+        random_state: Seed applied to splitting and model fitting
+        data_source: Source of the training data, recorded in the model metadata
+
     Returns:
-        dict: Training results including metrics and feature importance
+        dict: Training results including metrics, feature importance, and metadata
     """
     print("Loading training data...")
     df = load_training_data(data_path)
-    print(f"Loaded {len(df)} samples")
-    
+    n_samples = len(df)
+    print(f"Loaded {n_samples} samples (data source: {data_source})")
+
     print("\nPreparing data...")
-    X_train, X_test, y_train, y_test, scaler = prepare_data(df)
+    X_train, X_test, y_train, y_test, scaler = prepare_data(df, random_state=random_state)
     print(f"Training set: {len(X_train)} samples")
     print(f"Test set: {len(X_test)} samples")
-    
+
     print("\nTraining Random Forest Classifier...")
-    model = train_random_forest(X_train, y_train)
-    
+    model = train_random_forest(X_train, y_train, random_state=random_state)
+
     print("\nEvaluating model...")
     metrics = evaluate_model(model, X_test, y_test)
-    
-    print("\n" + "=" * 50)
-    print("MODEL EVALUATION RESULTS")
-    print("=" * 50)
-    print(f"Accuracy:  {metrics['accuracy']:.4f}")
-    print(f"Precision: {metrics['precision']:.4f}")
-    print(f"Recall:    {metrics['recall']:.4f}")
-    print(f"F1-Score:  {metrics['f1_score']:.4f}")
-    print("\nConfusion Matrix:")
+
+    metadata = build_model_metadata(metrics, n_samples, random_state, data_source)
+
+    print("\n" + "=" * 72)
+    print(f"MODEL EVALUATION RESULTS - measured on {data_source.upper()} DATA")
+    print("=" * 72)
+    if data_source == 'synthetic':
+        print(SYNTHETIC_MODEL_NOTICE)
+        print("-" * 72)
+    print(format_metric("Accuracy ", metrics['accuracy'], data_source))
+    print(format_metric("Precision", metrics['precision'], data_source))
+    print(format_metric("Recall   ", metrics['recall'], data_source))
+    print(format_metric("F1-Score ", metrics['f1_score'], data_source))
+    print(f"\nConfusion Matrix ({data_source} data):")
     cm = metrics['confusion_matrix']
     print(f"           Predicted")
     print(f"           Low  Med  High")
     print(f"Actual Low  {cm[0][0]:3d}  {cm[0][1]:3d}  {cm[0][2]:3d}")
     print(f"      Med  {cm[1][0]:3d}  {cm[1][1]:3d}  {cm[1][2]:3d}")
     print(f"     High  {cm[2][0]:3d}  {cm[2][1]:3d}  {cm[2][2]:3d}")
-    print("\nClassification Report:")
+    print(f"\nClassification Report ({data_source} data):")
     print(metrics['classification_report'])
-    
-    # Feature importance
+
+    # Feature importance. Also synthetic-derived: it reflects the generator's chosen
+    # distributions, not a measured property of human typing.
     importance = get_feature_importance(model)
-    print("Feature Importance:")
+    print(f"Feature Importance (derived from {data_source} data):")
     for feature, score in sorted(importance.items(), key=lambda x: x[1], reverse=True):
-        print(f"  {feature}: {score:.4f}")
-    
+        print(f"  {feature}: {score:.4f} ({data_source}-derived)")
+
+    print(f"\nModel version: {metadata['model_version']}")
+
     if save_models:
         print("\nSaving models...")
-        save_model(model, scaler)
-    
+        save_model(model, scaler, metadata=metadata)
+
     return {
         'model': model,
         'scaler': scaler,
         'metrics': metrics,
-        'feature_importance': importance
+        'feature_importance': importance,
+        'metadata': metadata,
+        'data_source': data_source,
     }
 
 
