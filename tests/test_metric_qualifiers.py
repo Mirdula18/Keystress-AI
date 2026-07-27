@@ -104,6 +104,26 @@ class TestFalsePositiveResistance:
         assert not has_metric_number("font-size: 0.9rem")
         assert has_metric_number("accuracy 0.90")
 
+    @pytest.mark.parametrize("line", [
+        "measured cost of 0.371s, and the confidence figure stops wobbling",
+        "the fit took 1.250s so confidence in the timing is high",
+        "transition: width 0.5s ease;  /* .result-confidence */",
+    ])
+    def test_multi_digit_decimals_with_units_are_not_metrics(self, line: str) -> None:
+        """
+        Regression: the regex used to backtrack around the unit guard.
+
+        Given "0.371s" the engine matched "0.371", saw the forbidden "s", then gave back a
+        digit to match "0.37" - whose next character is "1", not a unit - and reported a
+        metric. Anchoring the fraction so it cannot be shortened fixes it.
+        """
+        assert check_text(line, Path("x.md")) == [], f"unit value flagged: {line!r}"
+
+    def test_genuine_decimals_are_still_caught(self) -> None:
+        """The fix must not blind the checker to real unqualified metrics."""
+        assert check_text("accuracy 0.9013", Path("x.md"))
+        assert check_text("recall was 0.87 overall", Path("x.md"))
+
 
 class TestExceptionMarker:
     """The escape hatch must require a written reason."""
