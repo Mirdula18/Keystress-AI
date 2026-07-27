@@ -67,3 +67,98 @@ a reader can see both the original claim and why it was wrong.
 
 **Consequences.** The document reads as a hybrid of snapshot and correction. This is intentional and
 its header says so.
+
+---
+
+## D-004 — `probabilities` changed from a labelled dict to an ordered array
+
+**Phase 0 · F1 · `feat/F1-honest-metrics`**
+
+**Context.** The inherited response returned `probabilities` as a dict keyed by label string
+(`{"Low Burnout": 0.9, ...}`), while `ARCHITECTURE.md` §4.3 specifies an ordered array
+(`[0.20, 0.62, 0.18]`). F1 also reworded every label, which would have silently broken any consumer
+keying on the old strings.
+
+**Decision.** Emit `probabilities` as an array ordered by class index, plus a parallel `labels` array
+giving the position meanings.
+
+**Rationale.** Following the documented contract beats preserving an undocumented one. Keying
+probabilities by display text couples data to presentation: the label rewording this feature required
+would have broken the frontend invisibly, returning `undefined` percentages rather than an error.
+With an array plus `labels`, the frontend renders whatever the server says the classes are and never
+hard-codes them — which matters again at F8 when the feature set and classes may change.
+
+**Consequences.** A breaking change to `/api/predict` for any external consumer. Acceptable
+pre-release, and the frontend was updated in the same commit.
+
+---
+
+## D-005 — Degenerate sessions abstain instead of being scored
+
+**Phase 0 · F1 · `feat/F1-honest-metrics`**
+
+**Context.** A session with no measurable duration yields an all-zero feature vector
+(`feature_engineering.py:41-48`). The inherited code passed that vector to the model, which returned
+a confident-looking classification derived from no information at all.
+
+**Decision.** Add `has_sufficient_signal()`. When every feature is zero, return
+`insufficient_data: true` with `prediction`, `confidence`, and `probabilities` all `null`, and an
+explanation instead of a score.
+
+**Rationale.** HARD RULE 6 forbids a silent fake result, and scoring an all-zero vector is exactly
+that. The gate is deliberately minimal — all-zero only — because a real input-quality threshold
+requires calibration data that does not exist yet (F7). Guessing a threshold now would substitute
+one arbitrary number for another.
+
+**Consequences.** `/api/predict` can return a `null` prediction, so every consumer must handle the
+`insufficient_data` branch. The frontend styles it as an explicit non-result rather than defaulting
+to the reassuring "low" styling, which the inherited `level_classes.get(..., 'low')` fallback would
+otherwise have done — a non-result must never read as good news.
+
+---
+
+## D-006 — Localhost binding pulled forward from F3 into Phase 0
+
+**Phase 0 · F1 · `feat/F1-honest-metrics`**
+
+**Context.** `app.py` bound to `0.0.0.0` while its own startup banner advertised `127.0.0.1`. Host
+binding formally belongs to F3 in Phase 1.
+
+**Decision.** Fix it now: default `127.0.0.1`, overridable through `KEYSTRESS_HOST`, with a printed
+warning when the override is not a loopback address.
+
+**Rationale.** This was a live violation of HARD RULE 5, not a missing feature, and the code
+contradicted its own user-facing message. Leaving a known hard-rule breach in place for a whole phase
+to respect a roadmap boundary would be process over substance. The full config layer still lands in
+F3/F14.
+
+**Consequences.** Anyone relying on network access from another machine must now set
+`KEYSTRESS_HOST` explicitly. That is the intended direction of the change.
+
+---
+
+## D-007 — The metric-qualifier check is deliberately narrow
+
+**Phase 0 · F1 · `feat/F1-honest-metrics`**
+
+**Context.** F1 requires a build-time check that fails when a metric string lacks a source
+qualifier. The obvious implementation — flag every number near a metric-ish word — produced
+false positives on CSS values (`font-size: 0.9rem`), documentation line-number tables
+(`| app.py | 715 | ... confidence ... |`), and this project's own feature identifiers, where a bare
+`F1` means `FEATURES.md` item 1 rather than F1-score.
+
+**Decision.** Narrow the matcher: percentages and 0-1 decimals always count; bare integers count only
+within 12 characters of the metric word and only in the 0-100 range; unit-suffixed numbers never
+count; `f1` matches only in its scored forms. Provide a `metrics-ok: <reason>` escape hatch that is
+inert without a written reason.
+
+**Rationale.** A checker that cries wolf gets disabled, and a disabled checker protects nothing. The
+guard is only worth having if its output is trustworthy enough that a failure is always acted on.
+Requiring a reason on every exception means the escape hatch leaves an audit trail instead of a
+silent bypass.
+
+**Consequences.** The check will miss exotic phrasings such as "accuracy was ninety percent".
+Accepted: `tests/test_metric_qualifiers.py` asserts against known-bad fixtures so the guard is proven
+able to fail, and the residual gap is narrower than the false-positive noise the broad version
+created. Documents that legitimately quote the removed claims (`docs/AUDIT.md` §5) carry explicit
+exception markers.

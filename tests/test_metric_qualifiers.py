@@ -1,0 +1,144 @@
+"""
+Tests for the metric-qualifier check (F1).
+
+The point of these tests is that the checker must be *able to fail*. A guard that always
+passes is indistinguishable from no guard at all, so the first thing asserted here is
+that a known-bad fixture is rejected.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tools.check_metric_qualifiers import (  # noqa: E402
+    check_file,
+    check_text,
+    has_metric_number,
+    has_qualifier,
+    is_ignored_line,
+    main,
+)
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).parent / "fixtures" / "metric_check"
+
+
+class TestCheckerCanFail:
+    """The guard must reject unqualified metrics."""
+
+    def test_bad_fixture_produces_violations(self) -> None:
+        violations = check_file(FIXTURES / "bad_unqualified.md")
+        assert violations, "checker failed to flag the deliberately-bad fixture"
+
+    def test_bad_fixture_flags_every_unqualified_line(self) -> None:
+        violations = check_file(FIXTURES / "bad_unqualified.md")
+        flagged = {v.line_number for v in violations}
+        # Four distinct unqualified claims live in the fixture.
+        assert len(flagged) >= 4, f"expected >= 4 violations, got {len(flagged)}"
+
+    def test_good_fixture_is_clean(self) -> None:
+        violations = check_file(FIXTURES / "good_qualified.md")
+        assert violations == [], (
+            "checker flagged properly qualified metrics: "
+            + "; ".join(v.render(REPO_ROOT) for v in violations)
+        )
+
+
+class TestQualifierDetection:
+    """Qualifier recognition."""
+
+    @pytest.mark.parametrize("text", [
+        "Accuracy: 90% on synthetic data",
+        "accuracy 0.90 (data_source: synthetic)",
+        "90% accuracy measured on real validated data",
+        "confidence 85%, uncalibrated",
+    ])
+    def test_qualified_metrics_pass(self, text: str) -> None:
+        assert check_text(text, Path("x.md")) == []
+
+    @pytest.mark.parametrize("text", [
+        "Accuracy: 90%",
+        "The model achieves 0.90 precision.",
+        "| F1-Score | ~90% |",
+        "Confidence: 85%",
+    ])
+    def test_unqualified_metrics_fail(self, text: str) -> None:
+        assert check_text(text, Path("x.md")), f"missed unqualified metric: {text!r}"
+
+    def test_qualifier_found_in_nearby_lines(self) -> None:
+        text = "All figures below were measured on synthetic data.\n\nAccuracy: 90%"
+        assert check_text(text, Path("x.md")) == []
+
+    def test_qualifier_too_far_away_does_not_count(self) -> None:
+        text = "Measured on synthetic data.\n\n\n\n\nAccuracy: 90%"
+        assert check_text(text, Path("x.md")), "distant qualifier should not satisfy the check"
+
+    def test_has_qualifier_is_case_insensitive(self) -> None:
+        assert has_qualifier("On SYNTHETIC Data")
+
+
+class TestFalsePositiveResistance:
+    """A noisy checker gets disabled, so layout values must not trip it."""
+
+    @pytest.mark.parametrize("line", [
+        ".result-confidence { font-size: 0.9rem; }",
+        ".result-confidence { margin-top: 12px; }",
+        ".confidence-bar { transition: width 0.5s ease; }",
+    ])
+    def test_css_units_are_not_metrics(self, line: str) -> None:
+        assert check_text(line, Path("x.css")) == [], f"CSS value flagged: {line!r}"
+
+    def test_metric_word_without_number_is_ignored(self) -> None:
+        assert check_text("We report accuracy in the eval report.", Path("x.md")) == []
+
+    def test_number_without_metric_word_is_ignored(self) -> None:
+        assert check_text("There are 1500 samples in the dataset.", Path("x.md")) == []
+
+    def test_has_metric_number_rejects_unit_values(self) -> None:
+        assert not has_metric_number("font-size: 0.9rem")
+        assert has_metric_number("accuracy 0.90")
+
+
+class TestExceptionMarker:
+    """The escape hatch must require a written reason."""
+
+    def test_marker_with_reason_silences_the_line(self) -> None:
+        text = "Accuracy: 90%  metrics-ok: threshold config, not a claim"
+        assert check_text(text, Path("x.md")) == []
+
+    def test_marker_without_reason_does_not_silence(self) -> None:
+        text = "Accuracy: 90%  metrics-ok:"
+        assert check_text(text, Path("x.md")), "bare marker must not silence the check"
+
+    def test_marker_on_preceding_line_covers_next_line(self) -> None:
+        text = "# metrics-ok: fixture value used by the calibration test\nAccuracy: 90%"
+        assert check_text(text, Path("x.py")) == []
+
+    def test_is_ignored_line_requires_reason(self) -> None:
+        assert is_ignored_line("x  metrics-ok: because reasons")
+        assert not is_ignored_line("x  metrics-ok:   ")
+
+
+class TestRepositoryIsClean:
+    """The live repository must satisfy its own rule (F1 acceptance criterion)."""
+
+    def test_repository_has_no_unqualified_metrics(self) -> None:
+        assert main([str(REPO_ROOT)]) == 0, (
+            "the repository contains an unqualified metric; "
+            "run `python tools/check_metric_qualifiers.py` for details"
+        )
+
+    def test_cli_exits_nonzero_on_bad_input(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "tools" / "check_metric_qualifiers.py"),
+             str(FIXTURES / "bad_unqualified.md")],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 1, "CLI must exit 1 on violations"
+        assert "FAILED" in result.stdout
