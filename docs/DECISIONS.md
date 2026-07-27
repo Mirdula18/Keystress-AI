@@ -253,3 +253,52 @@ oversight.
 
 **Consequences.** Divergence from `CLAUDE.md` §4, recorded here rather than by silently editing the
 brief. Should be reconciled when that document is next revised.
+
+---
+
+## D-012 — Characterization tests assert on the page *bundle*, not the `/` response body
+
+**Phase 0 · F10 · `feat/F10-extract-frontend`**
+
+**Context.** F10 required behaviour-preserving extraction with a characterization test written first.
+The obvious form — assert that `GET /` contains `.result-icon` and `function displayResults` — passes
+before extraction and fails after it, purely because the bytes moved into linked files. Such a test
+does not protect the refactor; it forbids it.
+
+**Decision.** Add a `page_bundle()` helper that fetches `/` plus every same-origin stylesheet and
+script it links, and assert CSS/JS content against that. Assertions about *markup* (element IDs, the
+research banner, document structure) still read the `/` body directly, since that content must remain
+in the page itself.
+
+**Rationale.** The bundle is what a browser ends up with, which is the actual observable behaviour.
+The helper is indifferent to storage location but not to content: deleting a CSS rule or a JS function
+still fails, and a broken asset link fails loudly because the helper asserts each linked asset returns
+200. The distinction is deliberate — location-independent for assets, location-sensitive for markup
+that must not be deferred behind a second request.
+
+**Consequences.** The suite was written, run green pre-extraction, then run green post-extraction
+**without modification to any assertion**. That is the evidence the extraction preserved behaviour.
+The helper also gives F16 (self-hosted assets) a natural place to assert that no third-party origins
+remain.
+
+---
+
+## D-013 — `index.html` is a Jinja template solely for `url_for`
+
+**Phase 0 · F10 · `feat/F10-extract-frontend`**
+
+**Context.** The extracted page needs to reference `styles.css` and `app.js`. Hardcoding
+`/static/styles.css` works but silently breaks if the app is ever mounted under a path prefix.
+
+**Decision.** Serve `web/index.html` through `render_template`, using
+`url_for('static', filename=...)` for the two asset URLs and nothing else. `template_folder` points at
+`web/`, `static_folder` at `web/static/`.
+
+**Rationale.** Two `url_for` calls buy correct URLs under any mount point at effectively zero cost,
+and the setup stays build-free as F10 requires — editing the frontend needs no toolchain, and the
+file remains valid, readable HTML. Introducing server-side rendering of *content* would recreate the
+Python/markup coupling this feature exists to remove, so the template contains no logic, no loops, and
+no interpolated content.
+
+**Consequences.** `web/index.html` is not directly openable in a browser as a file, since the two
+`url_for` expressions need rendering. Acceptable: the page cannot function without the API anyway.

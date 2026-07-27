@@ -116,3 +116,29 @@ Entries reference the feature IDs in [`docs/FEATURES.md`](docs/FEATURES.md).
   rather than a stack trace or a startup crash (HARD RULE 6).
 - `TypingSession` switched from wall-clock `time.time()` to `time.monotonic()`, and accepts an
   injected timestamp so tests need not sleep.
+
+---
+
+### F10 — Extract the frontend from the Python string
+
+#### Added
+- `keystress/web/` — the frontend as real files: `index.html` (145 lines),
+  `static/styles.css` (428 lines), `static/app.js` (194 lines). Build-free: Flask serves the
+  directory, so editing the frontend needs no toolchain (D-013).
+- `tests/test_characterization.py` — 67 tests pinning the rendered page and the `/api/predict`
+  round-trip, **written and run green before the extraction, then run green after it with no
+  assertion changed**. That is the evidence the extraction preserved behaviour.
+- `tests/conftest.py` — shared fixtures, including an in-memory `ModelBundle` so API tests never
+  depend on a trained artifact on disk, and `page_bundle()`, which fetches `/` plus every linked
+  same-origin asset (D-012).
+
+#### Changed
+- **No HTML, CSS, or JavaScript remains in any Python file.** `keystress/app.py` drops from 817 to
+  180 lines; the 677-line `HTML_TEMPLATE` string literal is gone.
+- `/` now renders `web/index.html`; assets are served from `/static/`.
+- The frontend privacy contract is documented at the top of `app.js`, where the keydown handler
+  lives, rather than being implicit.
+
+#### Notes
+- The two CDN `<link>` tags (Google Fonts, Font Awesome) were carried across unchanged. Removing
+  them is F16; doing it here would have made this change more than behaviour-preserving.
