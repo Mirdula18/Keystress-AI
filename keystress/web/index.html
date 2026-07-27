@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keystress-AI | Academic Burnout Detection</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-brain"></i> Keystress-AI</h1>
+            <p>A research prototype exploring whether typing rhythm relates to academic wellbeing</p>
+        </header>
+
+        <div class="card research-banner">
+            <p><strong>Research prototype, not a burnout test.</strong> The model behind this page
+            was trained on <strong>synthetic data</strong> whose burnout categories were written by
+            hand in the data generator. It has never been tested against real burnout, so it cannot
+            tell you whether you are burned out, and nothing here is a medical assessment.</p>
+        </div>
+
+        <!-- Typing Test Card -->
+        <div class="card" id="test-card">
+            <div class="card-header">
+                <i class="fas fa-keyboard"></i>
+                <h2>Typing Session</h2>
+            </div>
+
+            <div class="typing-prompt">
+                <span class="label">TYPE THIS TEXT</span>
+                <p id="prompt-text">The quick brown fox jumps over the lazy dog. This simple sentence contains every letter of the alphabet and helps us understand your typing patterns. Please type naturally and at your own pace.</p>
+            </div>
+
+            <textarea id="typing-area" placeholder="Start typing here..." autocomplete="off" spellcheck="false"></textarea>
+
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="value" id="key-count">0</div>
+                    <div class="label">Keys Pressed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="value" id="backspace-count">0</div>
+                    <div class="label">Corrections</div>
+                </div>
+                <div class="stat-item">
+                    <div class="value" id="duration">0.0s</div>
+                    <div class="label">Duration</div>
+                </div>
+                <div class="stat-item">
+                    <div class="value" id="speed">0.0</div>
+                    <div class="label">Keys/Sec</div>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="resetTest()">
+                    <i class="fas fa-redo"></i> Reset
+                </button>
+                <button class="btn btn-primary" id="analyze-btn" onclick="analyzeTyping()" disabled>
+                    <i class="fas fa-chart-line"></i> Analyze Typing Session
+                </button>
+            </div>
+
+            <div class="privacy-notice">
+                <i class="fas fa-shield-alt"></i>
+                <p><strong>Privacy First:</strong> We only analyze timing patterns between keystrokes. Your actual typed content is never stored or transmitted. Your privacy is our priority.</p>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div class="card loader" id="loader-card">
+            <div class="spinner"></div>
+            <p>Analyzing your typing patterns...</p>
+        </div>
+
+        <!-- Results Card -->
+        <div class="card results" id="results-card">
+            <div class="result-header">
+                <div class="result-icon" id="result-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="result-level" id="result-level"></div>
+                <div class="result-confidence" id="result-confidence"></div>
+            </div>
+
+            <div class="result-description" id="result-description"></div>
+
+            <div class="probability-section" id="probability-section">
+                <h3 id="probability-heading">Indicator breakdown</h3>
+                <div class="probability-bar low">
+                    <div class="label">
+                        <span id="label-low">Low (indicator)</span>
+                        <span id="prob-low">0%</span>
+                    </div>
+                    <div class="bar">
+                        <div class="fill" id="bar-low" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="probability-bar medium">
+                    <div class="label">
+                        <span id="label-medium">Medium (indicator)</span>
+                        <span id="prob-medium">0%</span>
+                    </div>
+                    <div class="bar">
+                        <div class="fill" id="bar-medium" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="probability-bar high">
+                    <div class="label">
+                        <span id="label-high">High (indicator)</span>
+                        <span id="prob-high">0%</span>
+                    </div>
+                    <div class="bar">
+                        <div class="fill" id="bar-high" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="source-note" id="source-note"></div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="newTest()">
+                    <i class="fas fa-redo"></i> Run Another Session
+                </button>
+            </div>
+
+            <div class="privacy-notice disclaimer-notice">
+                <i class="fas fa-info-circle"></i>
+                <p><strong>Disclaimer:</strong> <span id="disclaimer-text"></span></p>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p>Built with ❤️ for academic wellness | <a href="https://github.com/Mirdula18/Keystress-AI" target="_blank">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

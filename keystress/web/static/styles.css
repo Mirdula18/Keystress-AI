@@ -1,0 +1,435 @@
+/*
+ * Keystress-AI stylesheet.
+ *
+ * Extracted from the HTML_TEMPLATE string literal in app.py (F10). Behaviour-preserving:
+ * every rule below is byte-identical to the inlined original apart from indentation.
+ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary: #6366f1;
+    --primary-dark: #4f46e5;
+    --secondary: #22d3ee;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --dark: #1e293b;
+    --light: #f8fafc;
+    --gray: #64748b;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+}
+
+.container {
+    max-width: 800px;
+    width: 100%;
+}
+
+/* Header */
+.header {
+    text-align: center;
+    color: white;
+    margin-bottom: 2rem;
+}
+
+.header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.header h1 i {
+    color: var(--secondary);
+}
+
+.header p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+/* Card */
+.card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #f1f5f9;
+}
+
+.card-header i {
+    font-size: 1.5rem;
+    color: var(--primary);
+}
+
+.card-header h2 {
+    font-size: 1.25rem;
+    color: var(--dark);
+}
+
+/* Typing Area */
+.typing-prompt {
+    background: linear-gradient(135deg, #f0f4ff 0%, #e8f4f8 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.typing-prompt p {
+    color: var(--dark);
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.typing-prompt .label {
+    display: inline-block;
+    background: var(--primary);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+}
+
+#typing-area {
+    width: 100%;
+    min-height: 150px;
+    padding: 1.25rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-family: inherit;
+    resize: none;
+    transition: all 0.3s ease;
+}
+
+#typing-area:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+#typing-area::placeholder {
+    color: #94a3b8;
+}
+
+/* Stats */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.stat-item {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.stat-item .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.stat-item .label {
+    font-size: 0.75rem;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Buttons */
+.btn-group {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.btn {
+    flex: 1;
+    padding: 1rem 1.5rem;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-secondary {
+    background: #f1f5f9;
+    color: var(--dark);
+}
+
+.btn-secondary:hover {
+    background: #e2e8f0;
+}
+
+/* Results */
+.results {
+    display: none;
+}
+
+.results.show {
+    display: block;
+}
+
+.result-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.result-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    font-size: 2rem;
+}
+
+.result-icon.low {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    color: var(--success);
+}
+
+.result-icon.medium {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: var(--warning);
+}
+
+.result-icon.high {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: var(--danger);
+}
+
+.result-level {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.result-level.low { color: var(--success); }
+.result-level.medium { color: var(--warning); }
+.result-level.high { color: var(--danger); }
+
+.result-confidence {
+    color: var(--gray);
+    font-size: 0.9rem;
+}
+
+.result-description {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+    color: var(--dark);
+    line-height: 1.6;
+}
+
+/* Probability bars */
+.probability-section h3 {
+    font-size: 0.9rem;
+    color: var(--gray);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.probability-bar {
+    margin-bottom: 0.75rem;
+}
+
+.probability-bar .label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.probability-bar .bar {
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.probability-bar .fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.probability-bar.low .fill { background: var(--success); }
+.probability-bar.medium .fill { background: var(--warning); }
+.probability-bar.high .fill { background: var(--danger); }
+
+/* Privacy notice */
+.privacy-notice {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 1px solid #86efac;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-top: 1.5rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.privacy-notice i {
+    color: var(--success);
+    font-size: 1.25rem;
+    margin-top: 0.125rem;
+}
+
+.privacy-notice p {
+    font-size: 0.875rem;
+    color: #166534;
+    line-height: 1.5;
+}
+
+/* Research-status banner (F1: the synthetic caveat is not fine print) */
+.research-banner {
+    border-left: 5px solid var(--warning);
+    padding: 1.25rem 1.5rem;
+}
+
+.research-banner p {
+    font-size: 0.9rem;
+    color: var(--dark);
+    line-height: 1.6;
+}
+
+/* Data-source note attached to every displayed metric */
+.source-note {
+    margin-top: 1.25rem;
+    padding: 0.875rem 1rem;
+    background: #f8fafc;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    color: var(--gray);
+    line-height: 1.5;
+}
+
+.disclaimer-notice {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border-color: #fcd34d;
+}
+
+.disclaimer-notice i {
+    color: var(--warning);
+}
+
+.disclaimer-notice p {
+    color: #78350f;
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.8);
+    margin-top: 2rem;
+    font-size: 0.875rem;
+}
+
+.footer a {
+    color: white;
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}
+
+/* Loader */
+.loader {
+    display: none;
+    text-align: center;
+    padding: 2rem;
+}
+
+.loader.show {
+    display: block;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #e2e8f0;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .header h1 {
+        font-size: 1.75rem;
+    }
+    
+    .btn-group {
+        flex-direction: column;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
