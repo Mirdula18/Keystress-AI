@@ -70,6 +70,21 @@ class TestSyntheticGeneration:
         second = generate_synthetic_typing_data(n_samples=150, random_state=2)
         assert not first.equals(second)
 
+    def test_uneven_sample_count_puts_the_remainder_in_class_2(self) -> None:
+        """The documented remainder rule: n // 3 per class, the rest in class 2."""
+        counts = (
+            generate_synthetic_typing_data(n_samples=10, random_state=7)
+            ["burnout_level"].value_counts().sort_index()
+        )
+        assert counts.to_dict() == {0: 3, 1: 3, 2: 4}
+
+    def test_tiny_sample_counts_do_not_crash(self) -> None:
+        """Below three samples some classes are empty; the generator must still work."""
+        for n in (1, 2):
+            df = generate_synthetic_typing_data(n_samples=n, random_state=7)
+            assert len(df) == n
+            assert set(df["burnout_level"].unique()) <= {0, 1, 2}
+
 
 class TestNoPointMass:
     """
@@ -196,6 +211,36 @@ class TestTrainingPipeline:
         _, _, y_train, y_test, _ = prepare_data(df, random_state=11)
         assert set(np.unique(y_train)) == set(np.unique(y_test)) == {0, 1, 2}
 
+    def test_prepare_data_honours_a_custom_test_size(self, dataset_path) -> None:
+        df = load_training_data(dataset_path)
+        X_train, X_test, _, _, _ = prepare_data(df, test_size=0.3, random_state=11)
+        assert len(X_train) + len(X_test) == len(df)
+        assert len(X_test) / len(df) == pytest.approx(0.3, abs=0.01)
+
+    def test_evaluate_model_tolerates_degenerate_predictions(self) -> None:
+        """
+        A model predicting one class for every sample must not divide by zero.
+
+        `zero_division=0` turns the undefined precision/recall for the unpredicted class
+        into 0.0 instead of crashing or emitting NaN.
+        """
+
+        class _FixedPredictor:
+            def __init__(self, predictions):
+                self._predictions = predictions
+
+            def predict(self, _X):  # type: ignore[no-untyped-def]
+                return np.asarray(self._predictions)
+
+        y_test = np.array([0, 1, 0])
+        y_pred = np.array([1, 1, 1])
+        metrics = evaluate_model(_FixedPredictor(y_pred), np.zeros((3, 5)), y_test)
+
+        expected = 1 / 9
+        assert metrics["precision"] == pytest.approx(expected)
+        assert metrics["recall"] == pytest.approx(1 / 3)
+        assert metrics["accuracy"] == pytest.approx(1 / 3)
+
     def test_training_produces_a_usable_model(self, dataset_path) -> None:
         df = load_training_data(dataset_path)
         X_train, X_test, y_train, y_test, _ = prepare_data(df, random_state=11)
@@ -265,6 +310,20 @@ class TestModelMetadata:
         assert "synthetic" in metadata["metrics_caveat"].lower()
         assert metadata["metrics_caveat"], "a synthetic model must carry its caveat"
 
+    def test_real_metadata_has_no_synthetic_caveat_or_generator(self, metrics) -> None:
+        metadata = build_model_metadata(metrics, 1500, 42, "real")
+        assert metadata["data_source"] == "real"
+        assert metadata["metrics_caveat"] == ""
+        assert "generator_version" not in metadata, (
+            "generator identity only means something for synthetic data"
+        )
+
+    def test_report_for_real_source_omits_the_synthetic_caveat(self, metrics) -> None:
+        metadata = build_model_metadata(metrics, 1500, 42, "real")
+        report = format_evaluation_report(metrics, {"avg_typing_speed": 0.5}, metadata)
+        assert "on real validated data" in report
+        assert "hand" not in report.lower(), "the hand-authored caveat must not follow real data"
+
     def test_metadata_records_feature_set_and_seed(self, metrics) -> None:
         metadata = build_model_metadata(metrics, 1500, 42, "synthetic")
         assert metadata["feature_set"] == "v1"
@@ -305,6 +364,28 @@ class TestEndToEndTraining:
 
         stored = json.loads(metadata_path.read_text(encoding="utf-8"))
         assert stored["model_version"] == results["metadata"]["model_version"]
+
+    def test_train_and_evaluate_without_saving_writes_nothing(self, tmp_path) -> None:
+        """`save_models=False` returns the fitted artifacts but touches no disk."""
+        data_path = save_synthetic_data(
+            generate_synthetic_typing_data(n_samples=150, random_state=23),
+            tmp_path / "data.csv",
+        )
+        model_path = tmp_path / "m.pkl"
+        scaler_path = tmp_path / "s.pkl"
+        metadata_path = tmp_path / "meta.json"
+
+        results = train_and_evaluate(
+            data_path=data_path, save_models=False,
+            model_path=model_path, scaler_path=scaler_path,
+            metadata_path=metadata_path, random_state=23,
+        )
+
+        assert results["model"] is not None
+        assert results["metadata"]["data_source"] == "synthetic"
+        assert not model_path.exists()
+        assert not scaler_path.exists()
+        assert not metadata_path.exists()
 
     def test_trained_model_loads_through_the_registry(self, tmp_path) -> None:
         """Training and loading must agree on the artifact format."""

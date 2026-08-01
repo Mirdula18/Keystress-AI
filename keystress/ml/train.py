@@ -201,7 +201,8 @@ def evaluate_model(model: Any, X_test: np.ndarray, y_test: np.ndarray) -> dict[s
         "f1_score": float(f1_score(y_test, y_pred, average="weighted", zero_division=0)),
         "confusion_matrix": confusion_matrix(y_test, y_pred).tolist(),
         "classification_report": classification_report(
-            y_test, y_pred, target_names=CLASS_DISPLAY_NAMES, zero_division=0
+            y_test, y_pred, target_names=CLASS_DISPLAY_NAMES,
+            labels=[0, 1, 2], zero_division=0
         ),
     }
 

@@ -8,6 +8,7 @@ conditions and failure modes: bad payloads, missing models, and the configuratio
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
@@ -18,7 +19,7 @@ from keystress.api.predict import (
 )
 from keystress.app import create_app
 from keystress.config import LOOPBACK_HOSTS, Settings, load_settings
-from keystress.core.model import ModelRegistry
+from keystress.core.model import ModelBundle, ModelRegistry
 from tests.conftest import make_events
 
 
@@ -50,6 +51,10 @@ class TestPayloadValidation:
 
     def test_accepts_a_payload_at_the_minimum(self) -> None:
         events = make_events(count=MIN_KEYSTROKE_EVENTS)
+        assert validate_payload({"keystroke_events": events})[0] is not None
+
+    def test_accepts_a_payload_at_the_maximum(self) -> None:
+        events = [{"timestamp": 0.0, "is_backspace": False}] * MAX_KEYSTROKE_EVENTS
         assert validate_payload({"keystroke_events": events})[0] is not None
 
     def test_rejects_an_oversized_payload_without_processing_it(self) -> None:
@@ -93,6 +98,36 @@ class TestPredictEndpoint:
     def test_a_long_session_scores(self, client) -> None:
         events = make_events(count=5000, interval=0.15)
         assert client.post("/api/predict", json={"keystroke_events": events}).status_code == 200
+
+    def test_feature_set_mismatch_returns_500_without_a_stack_trace(self) -> None:
+        """
+        A model that cannot score the current feature set must fail clearly, not leak.
+
+        This is the `except (ValueError, AttributeError)` branch: a well-formed request
+        against a bundle whose scaler refuses the input shape. The client gets a plain
+        message; no traceback reaches it.
+        """
+
+        class _BrokenScaler:
+            def transform(self, _features):  # type: ignore[no-untyped-def]
+                raise ValueError("expected 5 features, got 6")
+
+        registry = ModelRegistry()
+        registry.set(ModelBundle(
+            estimator=object(),
+            scaler=_BrokenScaler(),
+            metadata={"model_version": "broken", "data_source": "synthetic", "feature_set": "v1"},
+        ))
+        app = create_app(registry=registry, load_model=False)
+        app.config.update(TESTING=True)
+
+        response = app.test_client().post(
+            "/api/predict", json={"keystroke_events": make_events()}
+        )
+        assert response.status_code == 500
+        body = response.get_json()
+        assert "error" in body
+        assert "retrain" in body["error"], "the message must point at the fix"
 
 
 class TestAppFactory:
@@ -174,6 +209,27 @@ class TestConfiguration:
         assert settings.port == 8080
         assert settings.debug is True
         assert not settings.is_loopback
+
+    def test_path_and_boolean_env_overrides_are_read(self, monkeypatch) -> None:
+        monkeypatch.setenv("KEYSTRESS_MODEL_PATH", "custom/model.pkl")
+        monkeypatch.setenv("KEYSTRESS_SCALER_PATH", "custom/scaler.pkl")
+        monkeypatch.setenv("KEYSTRESS_METADATA_PATH", "custom/meta.json")
+        monkeypatch.setenv("KEYSTRESS_DATA_PATH", "custom/data.csv")
+        monkeypatch.setenv("KEYSTRESS_LOG_LEVEL", "debug")
+        monkeypatch.setenv("KEYSTRESS_AUTO_TRAIN", "false")
+
+        settings = load_settings()
+        assert settings.model_path == Path("custom/model.pkl")
+        assert settings.scaler_path == Path("custom/scaler.pkl")
+        assert settings.metadata_path == Path("custom/meta.json")
+        assert settings.data_path == Path("custom/data.csv")
+        assert settings.log_level == "DEBUG"
+        assert settings.auto_train is False
+
+    def test_flask_debug_env_is_honoured_for_compatibility(self, monkeypatch) -> None:
+        """FLASK_DEBUG predates KEYSTRESS_DEBUG and must keep working."""
+        monkeypatch.setenv("FLASK_DEBUG", "true")
+        assert load_settings().debug is True
 
     def test_defaults_apply_when_environment_is_empty(self, monkeypatch) -> None:
         for name in ("KEYSTRESS_HOST", "KEYSTRESS_PORT", "KEYSTRESS_DEBUG", "FLASK_DEBUG"):
@@ -267,7 +323,60 @@ class TestEnsureModel:
         assert registry.is_loaded
         assert paths[0].stat().st_mtime_ns == mtime, "existing model was needlessly retrained"
 
+    def test_corrupt_artifacts_trigger_auto_training(self, tmp_path) -> None:
+        """A failed load must fall through to the auto-train path, not wedge the app."""
+        from keystress.app import ensure_model
+
+        settings = Settings(
+            auto_train=True,
+            data_path=tmp_path / "data.csv",
+            model_path=tmp_path / "model.pkl",
+            scaler_path=tmp_path / "scaler.pkl",
+            metadata_path=tmp_path / "meta.json",
+        )
+        settings.model_path.write_bytes(b"corrupt, not a pickle")
+        settings.scaler_path.write_bytes(b"also not a pickle")
+
+        registry = ModelRegistry()
+        ensure_model(registry, settings)
+
+        assert registry.is_loaded, "auto-train must recover from a corrupt artifact"
+        assert registry.get().data_source == "synthetic"
+
+    def test_auto_train_failure_is_swallowed_and_registry_stays_empty(
+            self, tmp_path, monkeypatch) -> None:
+        """
+        If the synthetic training run itself fails, the app must not crash.
+
+        HARD RULE 6: the process survives with a clear log line and an unloaded registry,
+        so /api/health and /readyz can still report the degraded state.
+        """
+        from keystress.app import ensure_model
+
+        def _boom(*_args, **_kwargs) -> None:
+            raise ValueError("synthetic generator exploded")
+
+        monkeypatch.setattr("keystress.ml.train.train_and_evaluate", _boom)
+
+        settings = Settings(
+            auto_train=True,
+            data_path=tmp_path / "data.csv",
+            model_path=tmp_path / "model.pkl",
+            scaler_path=tmp_path / "scaler.pkl",
+            metadata_path=tmp_path / "meta.json",
+        )
+        registry = ModelRegistry()
+        ensure_model(registry, settings)
+
+        assert not registry.is_loaded
+        assert not settings.model_path.exists(), "no artifact should be left behind"
+
     def test_configure_logging_is_tolerant_of_a_bad_level(self) -> None:
         from keystress.app import configure_logging
 
         configure_logging("NOT_A_LEVEL")  # must not raise
+
+    def test_configure_logging_accepts_a_valid_level(self) -> None:
+        from keystress.app import configure_logging
+
+        configure_logging("DEBUG")  # must not raise

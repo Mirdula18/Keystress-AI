@@ -22,6 +22,7 @@ from tools.check_metric_qualifiers import (  # noqa: E402
     has_metric_number,
     has_qualifier,
     is_ignored_line,
+    iter_files,
     main,
 )
 
@@ -81,6 +82,15 @@ class TestQualifierDetection:
 
     def test_has_qualifier_is_case_insensitive(self) -> None:
         assert has_qualifier("On SYNTHETIC Data")
+
+    def test_bare_integer_score_next_to_the_keyword_is_flagged(self) -> None:
+        """`accuracy 90` is a claim even though 90 is not a percentage or decimal."""
+        assert check_text("accuracy 90", Path("x.md"))
+
+    def test_bare_integer_far_from_the_keyword_is_ignored(self) -> None:
+        """Line numbers and the like must not be read as scores."""
+        assert check_text("the line number 90 contains the accuracy table",
+                          Path("x.md")) == []
 
 
 class TestFalsePositiveResistance:
@@ -162,3 +172,34 @@ class TestRepositoryIsClean:
         )
         assert result.returncode == 1, "CLI must exit 1 on violations"
         assert "FAILED" in result.stdout
+
+
+class TestFileScanning:
+    """Walk logic: exclusions, suffixes, and unreadable files."""
+
+    def test_iter_files_respects_exclusions(self, tmp_path) -> None:
+        (tmp_path / "a.py").write_text("x", encoding="utf-8")
+        (tmp_path / "b.md").write_text("x", encoding="utf-8")
+        (tmp_path / "c.csv").write_text("x", encoding="utf-8")
+        (tmp_path / "check_metric_qualifiers.py").write_text("x", encoding="utf-8")
+
+        hidden = tmp_path / ".git"
+        hidden.mkdir()
+        (hidden / "d.py").write_text("x", encoding="utf-8")
+        cache = tmp_path / "__pycache__"
+        cache.mkdir()
+        (cache / "e.py").write_text("x", encoding="utf-8")
+
+        found = sorted(p.name for p in iter_files([tmp_path]))
+        assert found == ["a.py", "b.md"], (
+            "expected only scannable, non-excluded files, got " + repr(found)
+        )
+
+    def test_check_file_is_blank_on_binary_content(self, tmp_path) -> None:
+        """A file that cannot be decoded as text contributes no violations."""
+        path = tmp_path / "binary.md"
+        path.write_bytes(b"\xff\xfe\x00\x80\x81\xff")
+        assert check_file(path) == []
+
+    def test_check_text_on_empty_string(self) -> None:
+        assert check_text("", Path("x.md")) == []

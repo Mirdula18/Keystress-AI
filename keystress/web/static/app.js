@@ -51,8 +51,10 @@ function updateStats() {
     document.getElementById('backspace-count').textContent = backspaceCount;
     document.getElementById('speed').textContent = speed;
 
-    // Enable analyze button after minimum keystrokes
-    analyzeBtn.disabled = keyCount < 20;
+    // Enable analyze button once the session reaches the server's documented minimum
+    // (MIN_KEYSTROKE_EVENTS in keystress/api/predict.py). The client gate and the server
+    // contract must not drift apart: anything the server would accept, the page allows.
+    analyzeBtn.disabled = keyCount < 5;
 }
 
 function updateDuration() {
@@ -79,8 +81,8 @@ function resetTest() {
 }
 
 function analyzeTyping() {
-    if (keystrokeData.length < 20) {
-        alert('Please type at least 20 keystrokes - shorter sessions carry too little timing signal to analyze.');
+    if (keystrokeData.length < 5) {
+        alert('Please type at least 5 keystrokes - shorter sessions carry too little timing signal to analyze.');
         return;
     }
 

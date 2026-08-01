@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import FrozenInstanceError
 
+import numpy as np
 import pytest
 
 from keystress.core.collect import (
@@ -22,7 +23,9 @@ from keystress.core.collect import (
 from keystress.core.disclosure import (
     DATA_SOURCE_QUALIFIERS,
     DISCLAIMER,
+    FEATURE_SET_VERSION,
     FEATURES_V1,
+    SHIPPED_DATA_SOURCE,
     format_metric,
     format_percentage,
     qualifier_for,
@@ -36,6 +39,8 @@ from keystress.core.features import (
 )
 from keystress.core.inference import (
     BURNOUT_LABELS,
+    disclosure_fields,
+    feature_vector,
     get_prediction_details,
     has_sufficient_signal,
     predict_burnout,
@@ -98,6 +103,18 @@ class TestProcessKeystrokeData:
         with pytest.raises(ValueError):
             process_keystroke_data([bad_event, {"timestamp": 1.0}])
 
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_timestamps_raise_value_error(self, value: float) -> None:
+        """
+        NaN/Inf pass the numeric isinstance check but must still be rejected.
+
+        A non-finite timestamp would turn every aggregate (duration, delays, features)
+        into NaN/Inf that silently reaches a model - the exact class of fake result
+        HARD RULE 6 forbids.
+        """
+        with pytest.raises(ValueError):
+            process_keystroke_data([{"timestamp": value}, {"timestamp": 1.0}])
+
     def test_non_mapping_event_raises(self) -> None:
         with pytest.raises(ValueError):
             process_keystroke_data(["not-a-dict"])
@@ -150,6 +167,23 @@ class TestTypingSession:
             "inter_key_delays", "start_time", "end_time",
         }
 
+    def test_collector_end_session_stamps_the_end_time(self) -> None:
+        collector = TypingDataCollector()
+        collector.start_session()
+        collector.record_key(is_backspace=False)
+        session = collector.end_session()
+
+        assert session.end_time is not None
+        assert session.end_time >= session.start_time
+
+    def test_record_keypress_rejects_a_non_finite_timestamp(self) -> None:
+        session = TypingSession()
+        with pytest.raises(ValueError):
+            session.record_keypress(timestamp=float("nan"))
+        with pytest.raises(ValueError):
+            session.record_keypress(timestamp=float("inf"))
+        assert session.get_total_keys() == 0, "a rejected keypress must not be recorded"
+
 
 # --------------------------------------------------------------------------------------
 # Features
@@ -193,6 +227,22 @@ class TestExtractTypingFeatures:
     def test_missing_keys_do_not_raise(self) -> None:
         assert extract_typing_features({}) == dict.fromkeys(FEATURES_V1, 0.0)
 
+    def test_keys_without_delays_still_yield_speed(self) -> None:
+        """
+        A session with keys and a duration but no inter-key delay list.
+
+        Only reachable through a hand-crafted record, but it must not crash and must not
+        fabricate delay-derived values.
+        """
+        features = extract_typing_features({
+            "total_keys": 3, "backspace_count": 0, "duration": 1.0,
+            "inter_key_delays": [],
+        })
+        assert features["avg_typing_speed"] == pytest.approx(3.0)
+        assert features["avg_inter_key_delay"] == 0.0
+        assert features["max_pause_duration"] == 0.0
+        assert features["typing_consistency"] == 0.0
+
 
 class TestFeatureHelpers:
     """Supporting transforms."""
@@ -219,11 +269,31 @@ class TestFeatureHelpers:
         df = features_to_dataframe(dict.fromkeys(FEATURES_V1, 2.0))
         assert normalize_features(df)["avg_typing_speed"].tolist() == [0.0]
 
+    def test_normalize_with_explicit_columns_only_scales_those(self) -> None:
+        df = features_to_dataframe(dict.fromkeys(FEATURES_V1, 1.0))
+        df.loc[1] = dict.fromkeys(FEATURES_V1, 1.0)
+        df["extra_column"] = [10.0, 20.0]
+
+        normalized = normalize_features(df, feature_columns=["avg_typing_speed"])
+        assert normalized["avg_typing_speed"].tolist() == [0.0, 0.0]
+        assert normalized["extra_column"].tolist() == [10.0, 20.0], (
+            "columns not listed must be left untouched"
+        )
+
     def test_feature_summary(self) -> None:
         sessions = [process_keystroke_data(make_events(count=n)) for n in (10, 20, 30)]
         summary = get_feature_summary(batch_extract_features(sessions))
         assert set(summary) == set(FEATURES_V1)
         assert set(summary["avg_typing_speed"]) == {"mean", "std", "min", "max"}
+
+    def test_feature_summary_skips_missing_columns(self) -> None:
+        """A dataframe without every v1 feature still summarises the ones it has."""
+        df = features_to_dataframe(dict.fromkeys(FEATURES_V1, 1.0)).drop(
+            columns=["backspace_ratio"]
+        )
+        summary = get_feature_summary(df)
+        assert "backspace_ratio" not in summary
+        assert set(summary) == set(FEATURES_V1) - {"backspace_ratio"}
 
 
 # --------------------------------------------------------------------------------------
@@ -250,6 +320,12 @@ class TestModelBundle:
     def test_missing_metadata_reports_unknown_not_a_flattering_default(self) -> None:
         bundle = ModelBundle(estimator=None, scaler=None, metadata={})
         assert bundle.model_version == "unknown"
+
+    def test_missing_source_and_feature_set_get_the_shipped_defaults(self) -> None:
+        """Provenance and feature-set defaults must still say something honest."""
+        bundle = ModelBundle(estimator=None, scaler=None, metadata={"model_version": "x"})
+        assert bundle.data_source == SHIPPED_DATA_SOURCE
+        assert bundle.feature_set == FEATURE_SET_VERSION
 
 
 class TestModelRegistry:
@@ -330,6 +406,12 @@ class TestReadMetadata:
         path.write_text("[1, 2, 3]", encoding="utf-8")
         assert read_metadata(path)["model_version"] == "unknown"
 
+    def test_unreadable_metadata_path_returns_unknown(self, tmp_path) -> None:
+        """An OSError while reading (here: a directory where a file was expected)."""
+        path = tmp_path / "meta.json"
+        path.mkdir()
+        assert read_metadata(path)["model_version"] == "unknown"
+
     def test_valid_metadata_is_read(self, tmp_path) -> None:
         path = tmp_path / "meta.json"
         path.write_text(json.dumps({
@@ -406,6 +488,50 @@ class TestInference:
         result = get_prediction_details(features, model_bundle)
         assert sum(result["probabilities"]) == pytest.approx(1.0, abs=1e-6)
 
+    def test_feature_vector_shape_and_column_order(self) -> None:
+        vector = feature_vector({"avg_typing_speed": 1.0, "backspace_ratio": 0.5})
+        assert vector.shape == (1, len(FEATURES_V1))
+        assert vector[0, FEATURES_V1.index("avg_typing_speed")] == 1.0
+        assert vector[0, FEATURES_V1.index("backspace_ratio")] == 0.5
+        assert vector[0, FEATURES_V1.index("max_pause_duration")] == 0.0, (
+            "a missing feature must default to 0.0, never raise"
+        )
+
+    def test_disclosure_fields_without_a_bundle(self) -> None:
+        """With no model loaded, disclosure still says what produced nothing."""
+        fields = disclosure_fields(None)
+        assert fields["data_source"] == SHIPPED_DATA_SOURCE
+        assert fields["model_version"] == "unknown"
+        assert fields["feature_set"] == FEATURE_SET_VERSION
+        assert fields["disclaimer"] == DISCLAIMER
+
+    def test_predict_falls_back_for_an_out_of_range_class(self) -> None:
+        """A model returning a class index the label table does not know must not crash."""
+
+        class _FixedEstimator:
+            def predict(self, _x):  # type: ignore[no-untyped-def]
+                return np.array([7])
+
+            def predict_proba(self, _x):  # type: ignore[no-untyped-def]
+                return np.array([[0.2, 0.3, 0.5]])
+
+        class _IdentityScaler:
+            def transform(self, _x):  # type: ignore[no-untyped-def]
+                return _x
+
+        bundle = ModelBundle(
+            estimator=_FixedEstimator(), scaler=_IdentityScaler(),
+            metadata={"model_version": "x", "data_source": "synthetic"},
+        )
+        features = extract_typing_features(process_keystroke_data(make_events()))
+        level, label, description, confidence = predict_burnout(features, bundle)
+
+        assert level == 7
+        assert label == "Unknown"
+        assert description == ""
+        expected_confidence = 0.5
+        assert confidence == pytest.approx(expected_confidence)
+
 
 # --------------------------------------------------------------------------------------
 # Disclosure helpers
@@ -474,6 +600,17 @@ class TestFormatPredictionOutput:
         from keystress.core.inference import format_prediction_output
 
         assert "hand" in format_prediction_output(result).lower()
+
+    def test_real_source_output_omits_the_synthetic_caveat(self, result) -> None:
+        from keystress.core.inference import format_prediction_output
+
+        result["data_source"] = "real"
+        result["model_version"] = "rf-v1-real-s42-n1500"
+        rendered = format_prediction_output(result).lower()
+
+        assert "on real validated data" in rendered
+        assert "hand" not in rendered, "the synthetic caveat must not follow a real source"
+        assert "synthetic" not in rendered
 
     def test_abstention_output_reports_no_score(self, model_bundle) -> None:
         from keystress.core.inference import format_prediction_output
