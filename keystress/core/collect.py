@@ -29,6 +29,7 @@ in ``docs/AUDIT.md`` §6 rather than left implicit.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -78,8 +79,16 @@ class TypingSession:
         Parameters:
             is_backspace: Whether the key pressed was a correction.
             timestamp: Event time; defaults to now. Injectable so tests need not sleep.
+
+        Raises:
+            ValueError: If the timestamp is not a finite number. A ``NaN`` or ``Inf``
+                value would poison every aggregate computed from the session, and those
+                aggregates silently reaching a model is worse than a loud failure.
         """
         current_time = time.monotonic() if timestamp is None else float(timestamp)
+
+        if not math.isfinite(current_time):
+            raise ValueError("Keypress timestamp must be a finite number")
 
         if self.start_time is None:
             self.start_time = current_time
@@ -215,8 +224,9 @@ def process_keystroke_data(keystroke_events: Sequence[Mapping[str, Any]]) -> dic
         ``start_time``, ``end_time``.
 
     Raises:
-        ValueError: If an event lacks a timestamp or carries a non-numeric one. Malformed
-            input fails loudly rather than being silently coerced to a plausible number.
+        ValueError: If an event lacks a timestamp or carries a non-numeric or non-finite
+            one (``NaN``/``Inf``). Malformed input fails loudly rather than being silently
+            coerced to a plausible number or allowed to poison the session aggregates.
     """
     if not keystroke_events:
         return empty_session_metadata()
@@ -235,9 +245,16 @@ def process_keystroke_data(keystroke_events: Sequence[Mapping[str, Any]]) -> dic
         if isinstance(raw_timestamp, bool) or not isinstance(raw_timestamp, (int, float)):
             raise ValueError(f"Keystroke event {index} has a non-numeric 'timestamp'")
 
+        timestamp_value = float(raw_timestamp)
+        if not math.isfinite(timestamp_value):
+            # NaN/Inf pass the isinstance check but would turn every downstream aggregate
+            # (duration, delays, features) into NaN/Inf that then silently reaches a
+            # model. Rejected here, loudly, like any other malformed input.
+            raise ValueError(f"Keystroke event {index} has a non-finite 'timestamp'")
+
         # Only these two values are read. Everything else in `event` is discarded here
         # and cannot appear anywhere downstream.
-        timestamps.append(float(raw_timestamp))
+        timestamps.append(timestamp_value)
         is_backspace.append(bool(event.get("is_backspace", False)))
 
     inter_key_delays = [

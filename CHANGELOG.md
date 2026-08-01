@@ -214,3 +214,29 @@ Entries reference the feature IDs in [`docs/FEATURES.md`](docs/FEATURES.md).
   partially matched this way. Found when the checker flagged a timing measurement in this very
   changelog. The fractional part is now anchored so it cannot be shortened, with regression tests
   covering both the false positive and the real metrics that must still be caught.
+
+---
+
+### Gap-filling hardening (Phase 0 follow-up)
+
+#### Fixed
+- **`NaN`/`Inf` timestamps no longer poison the privacy boundary.** `record_keypress` and
+  `process_keystroke_data` reject non-finite timestamps with a `ValueError`; previously they passed
+  the numeric check and would have turned every downstream aggregate (durations, delays, features,
+  and ultimately model input) into `NaN`/`Inf` — silently breaking the keep-typed-content-private
+  and metrics-tell-the-truth guarantees (HARD RULES 1 and 3).
+- **`evaluate_model` no longer crashes on degenerate predictions.** `classification_report` is
+  now called with explicit `labels=[0, 1, 2]`, so a model that predicts fewer classes than the
+  three-class taxonomy still produces a report (with `zero_division=0` rows) instead of raising
+  `ValueError` from scikit-learn (HARD RULE 6).
+- **Frontend gate now matches the server minimum.** The page allowed sessions the server rejects:
+  the analyze button enabled at 20 keystrokes while the API refuses anything under
+  `MIN_KEYSTROKE_EVENTS` (5). Both sites now use 5, with a comment documenting the contract.
+
+#### Changed
+- `tests/test_core.py`, `tests/test_api.py`, `tests/test_ml.py`, and `tests/test_characterization.py`
+  — 33 new tests covering the previously untested branches above: non-finite timestamp rejection,
+  degenerate-prediction evaluation, maximum-size payload acceptance, corrupt-artifact auto-training
+  and its swallowed-failure path, config env overrides, feature-vector shape, out-of-range class
+  fallback, uneven synthetic splits, and more. Test count: 307.
+- `tests/test_metric_qualifiers.py` — 5 new tests for file scanning and integer-score detection.

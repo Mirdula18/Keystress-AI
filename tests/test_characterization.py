@@ -107,9 +107,14 @@ class TestRenderedPage:
         body = client.get("/").get_data(as_text=True)
         assert "privacy-notice" in body
 
-    def test_minimum_keystroke_gate_present(self, client) -> None:
-        """The analyze button stays disabled below 20 keystrokes."""
-        assert re.search(r"keyCount\s*<\s*20", page_bundle(client))
+    def test_minimum_keystroke_gate_matches_the_server_minimum(self, client) -> None:
+        """
+        The client gate equals the server's MIN_KEYSTROKE_EVENTS.
+
+        The server's constant is the contract; the page must not refuse a session the
+        server would accept (or enable analysis for one it would not).
+        """
+        assert re.search(r"keyCount\s*<\s*5", page_bundle(client))
 
     def test_stylesheet_rules_present(self, client) -> None:
         """The CSS travels with the page, wherever it is stored."""
