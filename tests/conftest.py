@@ -74,7 +74,10 @@ def registry(model_bundle: ModelBundle) -> ModelRegistry:
 def app(registry: ModelRegistry):
     """A Flask app wired to the fixture model, never touching disk."""
     application = create_app(registry=registry, load_model=False)
-    application.config.update(TESTING=True)
+    # Rate limiting shares an in-process counter, so leaving it on would couple otherwise
+    # independent tests through a global. It is off here and exercised deliberately in
+    # test_security.py, which owns a fresh, limited app.
+    application.config.update(TESTING=True, RATELIMIT_ENABLED=False)
     return application
 
 
@@ -88,7 +91,7 @@ def client(app):
 def empty_app():
     """An app with no model loaded, for testing graceful degradation."""
     application = create_app(registry=ModelRegistry(), load_model=False)
-    application.config.update(TESTING=True)
+    application.config.update(TESTING=True, RATELIMIT_ENABLED=False)
     return application
 
 
