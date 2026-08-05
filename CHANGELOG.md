@@ -7,7 +7,36 @@ Entries reference the feature IDs in [`docs/FEATURES.md`](docs/FEATURES.md).
 
 ---
 
-## [Unreleased] — Phase 0: honesty and buildability
+## [Unreleased] — Phase 1: ethical core + validity spine
+
+### F3 — Privacy hardening & local-first defaults
+
+Defence-in-depth for the serving path, ahead of the project moving from a localhost tool toward a
+consent-gated, publicly hostable data-donation site (see D-019).
+
+**Added**
+- Request-body cap (`MAX_CONTENT_LENGTH`, default 1 MiB): an oversized payload is rejected with
+  `413` before it is parsed, so it cannot exhaust memory. Complements the semantic event-count cap
+  (D-021).
+- Per-client rate limiting on `/api/predict` via Flask-Limiter (default `60/minute`), returning
+  `429` with a `Retry-After` header. Only the model endpoint is throttled; health and static assets
+  are not.
+- Security headers on every response — `Content-Security-Policy`, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`; HSTS is
+  added only on a secure origin (`keystress/security.py`).
+- Config surface: `KEYSTRESS_MAX_CONTENT_LENGTH`, `KEYSTRESS_RATE_LIMIT`,
+  `KEYSTRESS_RATE_LIMIT_ENABLED`.
+- Runtime dependency `flask-limiter` (pinned with its transitive set in `requirements-lock.txt`).
+- `tests/test_security.py` — asserts the headers, the 413 cap, and the 429 limit; the shared test
+  fixtures disable rate limiting so they stay hermetic (D-021).
+
+**Decisions.** D-019 (F4 delivered as a crowdsourced, consent-gated donation site with honest
+framing), D-020 (Copenhagen Burnout Inventory as the labelling instrument), D-021 (F3 technical
+choices).
+
+---
+
+## Phase 0 — honesty and buildability
 
 ### Added
 - `docs/AUDIT.md` — Phase 0 baseline audit of the inherited codebase: layout mismatches, the

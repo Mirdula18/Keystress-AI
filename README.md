@@ -99,6 +99,9 @@ Configuration (all optional, safe defaults):
 | `KEYSTRESS_DEBUG` | `false` | Flask debug mode. |
 | `KEYSTRESS_LOG_LEVEL` | `INFO` | Application log level. |
 | `KEYSTRESS_AUTO_TRAIN` | `true` | Train from synthetic data at startup when no model is found. |
+| `KEYSTRESS_MAX_CONTENT_LENGTH` | `1048576` | Max request body in bytes; larger payloads get `413` before parsing (F3). |
+| `KEYSTRESS_RATE_LIMIT` | `60/minute` | Per-client limit on `/api/predict`; over-limit gets `429` (F3). |
+| `KEYSTRESS_RATE_LIMIT_ENABLED` | `true` | Master switch for rate limiting (F3). |
 
 Docker (after F15): `docker compose up`.
 

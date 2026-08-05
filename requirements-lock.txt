@@ -16,6 +16,7 @@
 
 # --- direct runtime dependencies ---
 flask==3.0.2
+flask-limiter==3.12
 joblib==1.5.2
 numpy==1.26.4
 pandas==2.2.3
@@ -28,6 +29,17 @@ itsdangerous==2.2.0
 jinja2==3.1.4
 markupsafe==3.0.3
 werkzeug==3.1.8
+
+# --- transitive: flask-limiter (F3) ---
+Deprecated==1.3.1
+limits==5.8.0
+markdown-it-py==4.0.0
+mdurl==0.1.2
+ordered-set==4.1.0
+Pygments==2.19.2
+rich==13.9.4
+typing_extensions==4.15.0
+wrapt==2.1.1
 
 # --- transitive: scikit-learn / pandas ---
 python-dateutil==2.9.0.post0

@@ -17,6 +17,7 @@ from ..core.collect import process_keystroke_data
 from ..core.features import extract_typing_features
 from ..core.inference import get_prediction_details
 from ..core.model import ModelUnavailableError
+from ..extensions import limiter, predict_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,10 @@ bp = Blueprint("predict", __name__)
 #: signal for the aggregate features to mean anything.
 MIN_KEYSTROKE_EVENTS = 5
 
-#: Upper bound on accepted events, so an oversized payload is rejected cleanly rather than
-#: consuming memory. Proper rate limiting and payload caps arrive with F3.
+#: Upper bound on accepted events, a semantic guard against a nonsensical session. The
+#: outer memory guard is ``Settings.max_content_length``, which rejects an oversized body
+#: with 413 before it is ever parsed (F3); this cap catches a payload that is small in
+#: bytes but absurd in event count.
 MAX_KEYSTROKE_EVENTS = 100_000
 
 #: CSS class per indicator level. A missing prediction maps to "unknown", never to "low" —
@@ -82,6 +85,7 @@ def validate_payload(payload: Any) -> tuple[Any, str]:
 
 
 @bp.route("/api/predict", methods=["POST"])
+@limiter.limit(predict_rate_limit)
 def api_predict() -> tuple[Any, int]:
     """
     Score a typing session and return a burnout risk indicator.

@@ -108,6 +108,14 @@ class Settings:
         data_path: Path to the training dataset.
         log_level: Root log level for the application logger.
         auto_train: Whether a missing model triggers a synthetic training run at startup.
+        max_content_length: Maximum accepted request body size in bytes. Bodies larger
+            than this are rejected with 413 before the JSON is parsed, so a pathological
+            payload cannot exhaust memory (F3). Raw keystroke timing is sensitive; a real
+            session is a few tens of kilobytes, so the 1 MiB default is already generous.
+        rate_limit: Per-client limit applied to ``/api/predict``, in Flask-Limiter syntax
+            (e.g. ``"60/minute"``). Caps abuse of the one endpoint that runs the model.
+        rate_limit_enabled: Master switch for rate limiting. On by default (F3); tests
+            disable it so they are not coupled to a shared counter.
     """
 
     host: str = "127.0.0.1"
@@ -123,6 +131,9 @@ class Settings:
     )
     log_level: str = "INFO"
     auto_train: bool = True
+    max_content_length: int = 1_048_576
+    rate_limit: str = "60/minute"
+    rate_limit_enabled: bool = True
 
     @property
     def is_loopback(self) -> bool:
@@ -151,4 +162,7 @@ def load_settings() -> Settings:
         ),
         log_level=_env_str("KEYSTRESS_LOG_LEVEL", "INFO").upper(),
         auto_train=_env_bool("KEYSTRESS_AUTO_TRAIN", default=True),
+        max_content_length=_env_int("KEYSTRESS_MAX_CONTENT_LENGTH", 1_048_576),
+        rate_limit=_env_str("KEYSTRESS_RATE_LIMIT", "60/minute"),
+        rate_limit_enabled=_env_bool("KEYSTRESS_RATE_LIMIT_ENABLED", default=True),
     )

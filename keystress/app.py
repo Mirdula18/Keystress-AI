@@ -26,10 +26,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from flask import Flask, render_template
+from flask import Flask, Response, jsonify, render_template, request
 
 from .config import Settings, load_settings
 from .core.model import ModelRegistry, ModelUnavailableError
+from .extensions import limiter
+from .security import apply_security_headers
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +131,14 @@ def create_app(settings: Settings | None = None,
     app.config["KEYSTRESS_SETTINGS"] = settings
     app.extensions["keystress_registry"] = registry
 
+    # F3 privacy hardening. The body cap rejects an oversized payload with 413 before it
+    # is parsed; the limiter throttles abuse of the model endpoint. Both read from config
+    # so they can be tuned or, for tests, switched off without code changes.
+    app.config["MAX_CONTENT_LENGTH"] = settings.max_content_length
+    app.config["KEYSTRESS_RATE_LIMIT"] = settings.rate_limit
+    app.config["RATELIMIT_ENABLED"] = settings.rate_limit_enabled
+    limiter.init_app(app)
+
     from .api.health import bp as health_bp
     from .api.predict import bp as predict_bp
 
@@ -139,6 +149,21 @@ def create_app(settings: Settings | None = None,
     def index() -> str:
         """Serve the single-page application from ``web/index.html``."""
         return render_template("index.html")
+
+    @app.after_request
+    def _security_headers(response: Response) -> Response:
+        """Harden every response (F3)."""
+        return apply_security_headers(response, is_secure=request.is_secure)
+
+    @app.errorhandler(413)
+    def _payload_too_large(_exc: Exception) -> tuple[Response, int]:
+        """Return the oversized-body rejection as JSON, matching the API error shape."""
+        return jsonify({"error": "Request body too large."}), 413
+
+    @app.errorhandler(429)
+    def _rate_limited(_exc: Exception) -> tuple[Response, int]:
+        """Return the rate-limit rejection as JSON. Flask-Limiter sets ``Retry-After``."""
+        return jsonify({"error": "Too many requests; please slow down."}), 429
 
     if load_model and not registry.is_loaded:
         ensure_model(registry, settings)

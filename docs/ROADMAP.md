@@ -42,8 +42,9 @@ inline HTML or global model state; privacy test green in CI; synthetic model bui
 Make it safe to put in front of a person, and start breaking the synthetic circularity.
 
 - [ ] **F2 — Consent, disclaimer & deletion flow.**
-- [ ] **F3 — Privacy hardening & local-first defaults** (localhost bind, validation, rate limit,
-      no CDN requirement on the core path).
+- [x] **F3 — Privacy hardening & local-first defaults** (localhost bind, validation, rate limit,
+      no CDN requirement on the core path). *Body cap → 413, per-client rate limit → 429, security
+      headers, prediction path CDN-free. See `CHANGELOG.md` F3 and D-021.*
 - [ ] **F4 — Real-data collection harness & study protocol** (consented, labeled, content-free;
       offline research path; cite the chosen wellbeing instrument).
 - [ ] **F5 — Validation harness** (participant-grouped splits, trivial baselines, calibration,
