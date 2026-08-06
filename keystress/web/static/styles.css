@@ -377,6 +377,97 @@ body {
     color: #78350f;
 }
 
+/* Consent gate and data controls (F2) */
+.consent-card {
+    border-left: 5px solid var(--primary);
+}
+
+.consent-summary {
+    font-size: 0.95rem;
+    color: var(--dark);
+    line-height: 1.7;
+    margin-bottom: 1.25rem;
+}
+
+/* Deliberately generous hit area and spacing: a consent checkbox is the one control on
+   this page that must never be ticked by accident. */
+.consent-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    margin-bottom: 0.75rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    color: var(--dark);
+    line-height: 1.6;
+    cursor: pointer;
+}
+
+.consent-option:hover {
+    border-color: var(--primary);
+}
+
+.consent-option input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.1rem;
+    flex-shrink: 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.consent-version {
+    margin-top: 1rem;
+    font-size: 0.75rem;
+    color: var(--gray);
+    text-align: center;
+}
+
+.donation-note {
+    margin-top: 0.75rem;
+    padding: 0.875rem 1rem;
+    background: #f0fdf4;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    color: #166534;
+    line-height: 1.5;
+}
+
+.data-card {
+    border-left: 5px solid var(--secondary);
+}
+
+/* Deletion is irreversible, so its control is styled as the serious action it is. */
+.btn-danger {
+    background: var(--danger);
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+/* Raw JSON: transparency means showing exactly what is stored, not a paraphrase. */
+.data-output {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--dark);
+    color: #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.data-output:empty {
+    display: none;
+}
+
 /* Footer */
 .footer {
     text-align: center;

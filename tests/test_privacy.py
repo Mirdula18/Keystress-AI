@@ -392,6 +392,64 @@ class TestSourceLevelGuarantees:
                 )
 
 
+# --------------------------------------------------------------------------------------
+# 6. Consent-gated storage discards content too (F2)
+# --------------------------------------------------------------------------------------
+
+
+class TestDonationStorageDiscardsContent:
+    """
+    Opt-in donation stores timing features and nothing else.
+
+    F2 introduces the first thing the project persists about a user. The privacy guarantee
+    must extend to it: a donated session, even a hostile one, must reach the database as
+    the five numeric features and nothing more — no raw events, no content, ever.
+    """
+
+    def _donate_hostile(self, client):
+        """Consent to donate, then donate a hostile payload. Returns the participant id."""
+        participant_id = client.post(
+            "/api/consent", json={"analysis": True, "donate": True}
+        ).get_json()["participant_id"]
+        response = client.post(
+            "/api/donate",
+            json={"keystroke_events": hostile_events()},
+            headers={"X-Consent-Id": participant_id},
+        )
+        assert response.status_code == 201
+        return participant_id
+
+    def test_stored_donation_is_content_free(self, client, store) -> None:
+        participant_id = self._donate_hostile(client)
+        summary = store.participant_summary(participant_id)
+        assert_no_content(summary, "stored participant summary")
+
+    def test_donation_stores_only_the_v1_feature_set(self, client, store) -> None:
+        participant_id = self._donate_hostile(client)
+        donations = store.participant_summary(participant_id)["donations"]
+        assert donations, "expected a donation to be stored"
+        for donation in donations:
+            assert set(donation["features"]) == set(FEATURES_V1)
+
+    def test_database_bytes_contain_no_secret(self, client, store) -> None:
+        """Scan the raw database file, not just the decoded rows."""
+        self._donate_hostile(client)
+        raw = Path(store.path).read_bytes().lower()
+        for token in SECRET_TOKENS:
+            assert token.lower().encode() not in raw, f"database file contains {token!r}"
+
+    def test_save_donation_drops_unknown_fields(self, store) -> None:
+        """The store filters to the whitelist even if a caller passes content directly."""
+        participant_id = store.create_participant(analysis=True, donate=True)["participant_id"]
+        store.save_donation(
+            participant_id,
+            {"avg_typing_speed": 1.0, "typed_text": SECRET_TEXT, "key": "KeyA"},
+        )
+        stored = store.list_donations(participant_id)[0]["features"]
+        assert set(stored) == set(FEATURES_V1)
+        assert_no_content(stored, "directly-saved donation features")
+
+
 class TestSuiteIntegrity:
     """
     Guard the guard.
@@ -403,7 +461,7 @@ class TestSuiteIntegrity:
 
     #: Floor on the number of privacy assertions. Raise it when tests are added; lowering
     #: it should require explaining which guarantee is being given up.
-    MINIMUM_PRIVACY_TESTS = 25
+    MINIMUM_PRIVACY_TESTS = 30
 
     def test_suite_has_not_been_emptied(self) -> None:
         import sys

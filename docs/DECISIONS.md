@@ -521,3 +521,51 @@ forgotten.
 
 **Consequences.** F16 must tighten `keystress/security.py` (drop the CDN and `'unsafe-inline'`
 entries) once assets are local. F14 must set a shared `RATELIMIT_STORAGE_URI`.
+
+---
+
+## D-022 — F2 consent: an opaque token, two independent agreements, and withdrawal separate from erasure
+
+**Phase 1 · `feat/F2-consent-flow`**
+
+**Context.** F2 introduces the first persistence of anything about a person, and the gate that must
+precede any analysis at all. Several designs would satisfy the acceptance criteria on paper; these
+are the ones chosen and why.
+
+**Decision.** Four choices worth recording:
+
+- **An anonymous UUID as the only credential, held in `localStorage`.** No accounts, no email, no
+  password. The token carries no personal content, so losing it leaks nothing — it merely makes the
+  stored rows unreachable, which is a tolerable failure mode for data the participant can delete
+  anyway. Accounts would mean collecting identifying information in order to protect
+  non-identifying information, which is backwards for a project whose product is privacy.
+
+- **Consent is two independent agreements, not one.** `analysis` permits processing this session;
+  `donate` permits storing its features. Neither implies the other, and only `analysis` gates
+  `/api/predict`. Bundling them would make "I want to try the tool" indistinguishable from "I want
+  to contribute to your dataset", which is precisely the conflation informed consent exists to
+  prevent. The default for both is unticked, and a test asserts neither ships pre-checked.
+
+- **The policy wording is versioned content, and every record stores the version in force.** A
+  later edit to the wording cannot retroactively reinterpret what someone agreed to; the record
+  says which text it was. Bumping `CONSENT_VERSION` on a meaning-changing edit is a documented
+  obligation in `keystress/core/consent.py`.
+
+- **Withdrawal (`PATCH /api/consent/<id>`) does not delete; deletion (`DELETE /api/data/<id>`)
+  does.** Turning off donation stops new storage and leaves existing rows alone. Silently
+  destroying data as a side effect of a settings change would be its own unpleasant surprise, and
+  a participant who wants erasure has an explicit, clearly labelled control for it. `PATCH`
+  requires both fields to be stated, so "omitted" can never be ambiguous between *unchanged* and
+  *withdrawn*.
+
+**Rationale.** The acceptance criteria ("no prediction without consent … nothing stored without
+opt-in … deletion is real") are the floor, not the design. Each choice above resolves a case where
+a compliant-but-thoughtless implementation would still treat the participant badly.
+
+**Consequences.** The whitelist in `Store.save_donation` is now a load-bearing privacy boundary and
+must be updated deliberately when F8 versions the feature set — adding a feature there is adding a
+field to what is persisted about people. F4 builds its labelled dataset on this store and will need
+the CBI scores (D-020) joined to `participant_id`. F17's trends dashboard depends on donated
+history existing, so it must degrade honestly for the analysis-only participant who has none.
+The consent gate is enforced server-side and defaults on; `KEYSTRESS_REQUIRE_CONSENT=false` exists
+for tests and must never be set in a deployment.

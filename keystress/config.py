@@ -116,6 +116,12 @@ class Settings:
             (e.g. ``"60/minute"``). Caps abuse of the one endpoint that runs the model.
         rate_limit_enabled: Master switch for rate limiting. On by default (F3); tests
             disable it so they are not coupled to a shared counter.
+        store_path: SQLite database holding consent records and opt-in donations (F2).
+            Nothing is written here except as the direct result of a user action; every
+            row is deletable via the data-deletion endpoint.
+        require_consent: Whether ``/api/predict`` refuses to run without a recorded
+            analysis consent. On by default (HARD RULE 4); tests disable it where consent
+            is not the thing under test.
     """
 
     host: str = "127.0.0.1"
@@ -134,6 +140,8 @@ class Settings:
     max_content_length: int = 1_048_576
     rate_limit: str = "60/minute"
     rate_limit_enabled: bool = True
+    store_path: Path = field(default_factory=lambda: PROJECT_ROOT / "data" / "keystress.db")
+    require_consent: bool = True
 
     @property
     def is_loopback(self) -> bool:
@@ -165,4 +173,6 @@ def load_settings() -> Settings:
         max_content_length=_env_int("KEYSTRESS_MAX_CONTENT_LENGTH", 1_048_576),
         rate_limit=_env_str("KEYSTRESS_RATE_LIMIT", "60/minute"),
         rate_limit_enabled=_env_bool("KEYSTRESS_RATE_LIMIT_ENABLED", default=True),
+        store_path=_env_path("KEYSTRESS_STORE_PATH", PROJECT_ROOT / "data" / "keystress.db"),
+        require_consent=_env_bool("KEYSTRESS_REQUIRE_CONSENT", default=True),
     )
