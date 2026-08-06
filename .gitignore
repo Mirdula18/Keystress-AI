@@ -209,3 +209,10 @@ __marimo__/
 # Keystress-AI specific
 models/
 data/synthetic_typing_data.csv
+
+# Consent records and donated timing features (F2). This is real participant data:
+# it is local-only, deletable through /api/data/<id>, and must never be committed.
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm

@@ -41,7 +41,9 @@ inline HTML or global model state; privacy test green in CI; synthetic model bui
 
 Make it safe to put in front of a person, and start breaking the synthetic circularity.
 
-- [ ] **F2 — Consent, disclaimer & deletion flow.**
+- [x] **F2 — Consent, disclaimer & deletion flow.** *Consent gate on `/api/predict` (403 without
+      it), versioned policy text, separate donate opt-in, view/withdraw/delete endpoints, and a UI
+      gate in front of the typing test. See `CHANGELOG.md` F2 and D-022.*
 - [x] **F3 — Privacy hardening & local-first defaults** (localhost bind, validation, rate limit,
       no CDN requirement on the core path). *Body cap → 413, per-client rate limit → 429, security
       headers, prediction path CDN-free. See `CHANGELOG.md` F3 and D-021.*

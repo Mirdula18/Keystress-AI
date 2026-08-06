@@ -30,6 +30,7 @@ from flask import Flask, Response, jsonify, render_template, request
 
 from .config import Settings, load_settings
 from .core.model import ModelRegistry, ModelUnavailableError
+from .core.storage import Store
 from .extensions import limiter
 from .security import apply_security_headers
 
@@ -106,6 +107,7 @@ def ensure_model(registry: ModelRegistry, settings: Settings) -> None:
 
 def create_app(settings: Settings | None = None,
                registry: ModelRegistry | None = None,
+               store: Store | None = None,
                load_model: bool = True) -> Flask:
     """
     Build the Flask application.
@@ -114,6 +116,8 @@ def create_app(settings: Settings | None = None,
         settings: Configuration; read from the environment when omitted.
         registry: Model registry to use. Injectable so tests can supply a fixture model
             without touching disk — the thing the inherited module globals made impossible.
+        store: Consent/donation store (F2). Injectable so tests can point at a temporary
+            database instead of the real one.
         load_model: Whether to load or train a model at startup.
 
     Returns:
@@ -121,6 +125,7 @@ def create_app(settings: Settings | None = None,
     """
     settings = settings if settings is not None else load_settings()
     registry = registry if registry is not None else ModelRegistry()
+    store = store if store is not None else Store(settings.store_path)
 
     app = Flask(
         __name__,
@@ -130,6 +135,8 @@ def create_app(settings: Settings | None = None,
     )
     app.config["KEYSTRESS_SETTINGS"] = settings
     app.extensions["keystress_registry"] = registry
+    app.extensions["keystress_store"] = store
+    app.config["KEYSTRESS_REQUIRE_CONSENT"] = settings.require_consent
 
     # F3 privacy hardening. The body cap rejects an oversized payload with 413 before it
     # is parsed; the limiter throttles abuse of the model endpoint. Both read from config
@@ -139,11 +146,13 @@ def create_app(settings: Settings | None = None,
     app.config["RATELIMIT_ENABLED"] = settings.rate_limit_enabled
     limiter.init_app(app)
 
+    from .api.consent import bp as consent_bp
     from .api.health import bp as health_bp
     from .api.predict import bp as predict_bp
 
     app.register_blueprint(predict_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(consent_bp)
 
     @app.route("/")
     def index() -> str:

@@ -101,6 +101,20 @@ def api_predict() -> tuple[Any, int]:
     """
     payload = request.get_json(silent=True)
 
+    # Consent gate (F2, HARD RULE 4): no analysis without a recorded consent. The token is
+    # taken from the X-Consent-Id header, falling back to a body field so a bare fetch
+    # works. Enforcement is config-gated so tests unrelated to consent can opt out.
+    if current_app.config.get("KEYSTRESS_REQUIRE_CONSENT", True):
+        consent_id = request.headers.get("X-Consent-Id")
+        if not consent_id and isinstance(payload, dict):
+            consent_id = payload.get("consent_id")
+        store = current_app.extensions.get("keystress_store")
+        if store is None or not store.has_analysis_consent(consent_id):
+            return _error(
+                "Analysis consent is required. Record consent at POST /api/consent first.",
+                403,
+            )
+
     events, message = validate_payload(payload)
     if events is None:
         return _error(message, 400)

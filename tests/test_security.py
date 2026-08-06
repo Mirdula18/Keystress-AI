@@ -13,15 +13,19 @@ from typing import Any
 from keystress.app import create_app
 from keystress.config import Settings
 from keystress.core.model import ModelRegistry
+from keystress.core.storage import Store
 from keystress.extensions import limiter
 from keystress.security import CONTENT_SECURITY_POLICY
 from tests.conftest import make_events
 
 
-def _build_app(registry: ModelRegistry, **overrides: Any):
+def _build_app(registry: ModelRegistry, store: Store, **overrides: Any):
     """Build a test app whose settings differ only in the given fields."""
-    application = create_app(settings=Settings(**overrides), registry=registry, load_model=False)
-    application.config.update(TESTING=True)
+    application = create_app(
+        settings=Settings(**overrides), registry=registry, store=store, load_model=False
+    )
+    # Consent is not what these tests exercise; disable the gate so predict returns 200.
+    application.config.update(TESTING=True, KEYSTRESS_REQUIRE_CONSENT=False)
     return application
 
 
@@ -57,8 +61,8 @@ class TestSecurityHeaders:
 class TestPayloadCap:
     """An oversized body is rejected with 413 before it is parsed."""
 
-    def test_oversized_body_is_rejected_with_413(self, registry) -> None:
-        app = _build_app(registry, max_content_length=200, rate_limit_enabled=False)
+    def test_oversized_body_is_rejected_with_413(self, registry, store) -> None:
+        app = _build_app(registry, store, max_content_length=200, rate_limit_enabled=False)
         client = app.test_client()
 
         oversized = {"keystroke_events": make_events(count=50)}
@@ -67,21 +71,21 @@ class TestPayloadCap:
         assert response.status_code == 413
         assert "too large" in response.get_json()["error"].lower()
 
-    def test_body_within_the_cap_is_accepted(self, registry, events) -> None:
-        app = _build_app(registry, max_content_length=1_048_576, rate_limit_enabled=False)
+    def test_body_within_the_cap_is_accepted(self, registry, store, events) -> None:
+        app = _build_app(registry, store, max_content_length=1_048_576, rate_limit_enabled=False)
         response = app.test_client().post("/api/predict", json={"keystroke_events": events})
         assert response.status_code == 200
 
-    def test_cap_is_read_from_settings(self, registry) -> None:
-        app = _build_app(registry, max_content_length=4096)
+    def test_cap_is_read_from_settings(self, registry, store) -> None:
+        app = _build_app(registry, store, max_content_length=4096)
         assert app.config["MAX_CONTENT_LENGTH"] == 4096
 
 
 class TestRateLimiting:
     """The model endpoint is throttled per client (F3)."""
 
-    def test_exceeding_the_limit_returns_429(self, registry, events) -> None:
-        app = _build_app(registry, rate_limit="2/minute", rate_limit_enabled=True)
+    def test_exceeding_the_limit_returns_429(self, registry, store, events) -> None:
+        app = _build_app(registry, store, rate_limit="2/minute", rate_limit_enabled=True)
         with app.app_context():
             limiter.reset()  # clear any counter left by an earlier enabled run
         client = app.test_client()
@@ -97,17 +101,17 @@ class TestRateLimiting:
         assert "too many" in third.get_json()["error"].lower()
         assert "Retry-After" in third.headers
 
-    def test_health_endpoint_is_not_throttled(self, registry) -> None:
+    def test_health_endpoint_is_not_throttled(self, registry, store) -> None:
         # Only /api/predict is limited; liveness checks must never be throttled.
-        app = _build_app(registry, rate_limit="1/minute", rate_limit_enabled=True)
+        app = _build_app(registry, store, rate_limit="1/minute", rate_limit_enabled=True)
         with app.app_context():
             limiter.reset()
         client = app.test_client()
         for _ in range(5):
             assert client.get("/api/health").status_code == 200
 
-    def test_disabled_limiter_does_not_throttle(self, registry, events) -> None:
-        app = _build_app(registry, rate_limit="1/minute", rate_limit_enabled=False)
+    def test_disabled_limiter_does_not_throttle(self, registry, store, events) -> None:
+        app = _build_app(registry, store, rate_limit="1/minute", rate_limit_enabled=False)
         client = app.test_client()
         payload = {"keystroke_events": events}
         for _ in range(4):
