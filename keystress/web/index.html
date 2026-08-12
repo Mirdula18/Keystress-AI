@@ -169,14 +169,18 @@
         </div>
 
         <!-- Loading State -->
-        <section class="card loader" id="loader-card" aria-hidden="true">
+        <!-- The card is `display: none` until an analysis starts, which already removes it
+             from the accessibility tree. It must NOT carry aria-hidden as well: that would
+             silence the role="status" line inside it, so the one element here whose whole
+             job is to be announced would never be. -->
+        <section class="card loader" id="loader-card" aria-label="Analysis progress">
             <div class="spinner" aria-hidden="true"></div>
             <p id="loader-message" role="status">Analyzing your typing patterns...</p>
         </section>
 
         <!-- Results Card -->
-        <section class="card results" id="results-card">
-            <h2 class="sr-only">Session results</h2>
+        <section class="card results" id="results-card" aria-labelledby="results-heading">
+            <h2 class="sr-only" id="results-heading">Session results</h2>
             <div class="result-header">
                 <div class="result-icon" id="result-icon">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
