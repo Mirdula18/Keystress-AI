@@ -45,7 +45,8 @@ const CONTROL_BINDINGS = [
     ['new-test-btn', 'click', newTest],
     ['donate-toggle', 'change', changeDonateConsent],
     ['view-data-btn', 'click', viewMyData],
-    ['delete-btn', 'click', deleteMyData]
+    ['delete-btn', 'click', deleteMyData],
+    ['questionnaire-submit', 'click', submitQuestionnaire]
 ];
 
 function bindControls() {
@@ -181,6 +182,8 @@ function showConsentGate(message) {
     document.getElementById('consent-analysis').checked = false;
     document.getElementById('consent-donate').checked = false;
     document.getElementById('data-output').textContent = '';
+    hideCard('questionnaire-card');
+    donationId = null;
     updateConsentButton();
     announce(message || 'Consent is required before anything can be analysed.');
     if (message) { alert(message); }
@@ -295,8 +298,14 @@ function donateSession() {
             }))
         })
     })
-    .then(response => {
-        note.textContent = response.ok
+    .then(response => response.json().then(body => ({ ok: response.ok, body: body })))
+    .then(result => {
+        if (result.ok) {
+            // Remember which session was stored, so the questionnaire can label *this*
+            // one rather than the participant in general.
+            donationId = result.body.donation_id;
+        }
+        note.textContent = result.ok
             ? 'You opted in, so this session’s five timing features were stored for '
               + 'research. Use "Your data" below to see or delete them.'
             : 'This session could not be stored, so nothing was saved for it.';
@@ -304,6 +313,200 @@ function donateSession() {
     .catch(() => {
         note.textContent = 'This session could not be stored, so nothing was saved for it.';
     });
+}
+
+// -------------------------------------------------------------------------------------
+// The research questionnaire (F4)
+//
+// This is the label side of the dataset. It is offered to everyone who has consented,
+// not only to donors: someone who wants their own score without contributing it is a
+// legitimate visitor, and the server simply does not store the answers in that case.
+//
+// PRIVACY: the payload is item id → integer scale value. There is no free-text field
+// anywhere in this flow, deliberately — it is the one control type that could carry
+// content, and it is where content would eventually arrive.
+// -------------------------------------------------------------------------------------
+
+// The donation this questionnaire labels, when there is one. Null means the answers are
+// scored (and possibly stored) without being tied to a typing session.
+let donationId = null;
+
+// The instrument as served, cached so re-answering does not re-fetch it.
+let instrument = null;
+
+function loadInstrument() {
+    if (instrument) { return Promise.resolve(instrument); }
+
+    return fetch('/api/instrument')
+        .then(response => response.json())
+        .then(payload => {
+            instrument = payload;
+            renderInstrument(payload);
+            return payload;
+        })
+        .catch(() => {
+            document.getElementById('questionnaire-progress').textContent =
+                'The questionnaire could not be loaded. Your typing session is unaffected.';
+            return null;
+        });
+}
+
+// Provenance first, then the items. Both are built with createElement and textContent
+// rather than innerHTML: server-supplied strings are never parsed as markup, which keeps
+// this honest under the strict CSP and immune to a malformed item text.
+function renderInstrument(payload) {
+    document.getElementById('instrument-disclaimer').textContent = payload.disclaimer;
+    document.getElementById('instrument-name').textContent = payload.name;
+    document.getElementById('instrument-citation').textContent = payload.citation;
+    document.getElementById('instrument-adaptation').textContent = payload.adaptation_note;
+
+    const container = document.getElementById('questionnaire-items');
+    container.textContent = '';
+
+    payload.subscales.forEach(function (subscale) {
+        const items = payload.items.filter(item => item.subscale === subscale.id);
+        if (!items.length) { return; }
+
+        const group = document.createElement('div');
+        group.className = 'question-group';
+
+        const title = document.createElement('h3');
+        title.textContent = subscale.label;
+        group.appendChild(title);
+
+        const description = document.createElement('p');
+        description.className = 'question-group-description';
+        description.textContent = subscale.description;
+        group.appendChild(description);
+
+        items.forEach(function (item) {
+            group.appendChild(renderItem(item, payload.scales[item.scale]));
+        });
+        container.appendChild(group);
+    });
+
+    updateQuestionnaireProgress();
+}
+
+// One item is a fieldset of radios: a radio group is the honest control for "pick exactly
+// one of five ordered options", and a fieldset/legend gives a screen reader the question
+// text with each option instead of five bare labels.
+function renderItem(item, scale) {
+    const fieldset = document.createElement('fieldset');
+    fieldset.className = 'question';
+    fieldset.dataset.itemId = item.id;
+
+    const legend = document.createElement('legend');
+    legend.textContent = item.text;
+    fieldset.appendChild(legend);
+
+    const options = document.createElement('div');
+    options.className = 'question-options';
+
+    scale.options.forEach(function (option) {
+        const label = document.createElement('label');
+        label.className = 'question-option';
+
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'item-' + item.id;
+        input.value = String(option.value);
+        input.addEventListener('change', updateQuestionnaireProgress);
+
+        const text = document.createElement('span');
+        text.textContent = option.label;
+
+        label.appendChild(input);
+        label.appendChild(text);
+        options.appendChild(label);
+    });
+
+    fieldset.appendChild(options);
+    return fieldset;
+}
+
+// Collect answers as item id → integer. Unanswered items are simply absent, which is what
+// makes the count below meaningful.
+function collectAnswers() {
+    const answers = {};
+    document.querySelectorAll('#questionnaire-items fieldset.question').forEach(function (field) {
+        const chosen = field.querySelector('input[type="radio"]:checked');
+        if (chosen) { answers[field.dataset.itemId] = parseInt(chosen.value, 10); }
+    });
+    return answers;
+}
+
+function updateQuestionnaireProgress() {
+    if (!instrument) { return; }
+
+    const answered = Object.keys(collectAnswers()).length;
+    const total = instrument.items.length;
+    const complete = answered === total;
+
+    document.getElementById('questionnaire-submit').disabled = !complete;
+    document.getElementById('questionnaire-progress').textContent = complete
+        ? 'All questions answered.'
+        : answered + ' of ' + total + ' questions answered.';
+}
+
+function submitQuestionnaire() {
+    const answers = collectAnswers();
+    if (!instrument || Object.keys(answers).length !== instrument.items.length) { return; }
+
+    const body = { responses: answers };
+    if (donationId !== null) { body.donation_id = donationId; }
+
+    fetch('/api/questionnaire', {
+        method: 'POST',
+        headers: consentHeaders(),
+        body: JSON.stringify(body)
+    })
+    .then(response => response.json().then(payload => ({ ok: response.ok, body: payload })))
+    .then(result => {
+        if (!result.ok) {
+            alert(result.body.error || 'Your answers could not be scored.');
+            return;
+        }
+        showQuestionnaireResult(result.body);
+    })
+    .catch(() => alert('Your answers could not be scored. Please try again.'));
+}
+
+function showQuestionnaireResult(result) {
+    const scores = document.getElementById('questionnaire-scores');
+    scores.textContent = '';
+
+    Object.keys(result.subscale_scores).forEach(function (subscale) {
+        const row = document.createElement('div');
+        row.className = 'score-row';
+
+        const name = document.createElement('span');
+        name.textContent = result.subscale_labels[subscale] || subscale;
+
+        const value = document.createElement('strong');
+        // Out of 100 is stated every time: a bare "62" invites being read as a percentage
+        // of something, or as a probability of being burned out. It is neither.
+        value.textContent = result.subscale_scores[subscale] + ' out of 100';
+
+        row.appendChild(name);
+        row.appendChild(value);
+        scores.appendChild(row);
+    });
+
+    document.getElementById('questionnaire-band').textContent =
+        'Overall: ' + result.overall_score + ' out of 100 — ' + result.band + '.';
+    document.getElementById('questionnaire-caveat').textContent = result.caveat;
+    document.getElementById('questionnaire-storage').textContent = result.storage_note;
+
+    document.getElementById('questionnaire-result').classList.remove('is-hidden');
+    announce('Questionnaire scored. ' + result.band + '. ' + result.caveat);
+}
+
+// Offered once a session has been analysed, so the questionnaire labels a real session
+// rather than arriving out of context.
+function showQuestionnaire() {
+    showCard('questionnaire-card');
+    loadInstrument();
 }
 
 loadConsentPolicy();
@@ -567,12 +770,15 @@ function displayResults(result) {
         + (result.confidence * 100).toFixed(0) + ' percent, uncalibrated, ' + qualifier + '.');
 
     donateSession();
+    showQuestionnaire();
 }
 
 function newTest() {
     document.getElementById('results-card').classList.remove('show');
     showCard('test-card');
     document.getElementById('donation-note').textContent = '';
+    hideCard('questionnaire-card');
+    donationId = null;
     resetTest();
     announce('Ready for a new typing session.');
 }

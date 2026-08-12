@@ -256,6 +256,77 @@
         </section>
 
         <!--
+            The research questionnaire (F4). This is the *label* side of the dataset, and
+            the only thing on this page that produces a number about the person rather
+            than about their typing.
+
+            Note what is deliberately absent: any comparison between this score and the
+            typing model's output. The model is synthetic-trained and unvalidated, so
+            putting the two side by side would invite the reader to conclude they measure
+            the same thing. That comparison earns a place here only after F5 (D-019).
+        -->
+        <section class="card questionnaire-card is-hidden" id="questionnaire-card"
+            aria-labelledby="questionnaire-heading">
+            <div class="card-header">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <path d="M9 11l3 3L22 4"></path>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+                <h2 id="questionnaire-heading">How have you been feeling?</h2>
+            </div>
+
+            <p class="questionnaire-intro">These questions come from a published burnout
+            questionnaire. Answering them gives you your own score — and, if you have opted
+            in, gives this research the real-world label it needs. There are no right
+            answers and nothing you type is involved.</p>
+
+            <div class="privacy-notice disclaimer-notice">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 16v-4"></path>
+                    <path d="M12 8h.01"></path>
+                </svg>
+                <p id="instrument-disclaimer"></p>
+            </div>
+
+            <!-- Filled from /api/instrument. The citation and the adaptation note are not
+                 optional decoration: using someone's instrument without naming it, or
+                 without saying how it was changed, is the misuse this page must not model. -->
+            <p class="instrument-provenance">
+                <span id="instrument-name"></span>
+                <span id="instrument-citation"></span>
+                <span id="instrument-adaptation"></span>
+            </p>
+
+            <div id="questionnaire-items"></div>
+
+            <p class="questionnaire-progress" id="questionnaire-progress" role="status"></p>
+
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary" id="questionnaire-submit" disabled>
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <path d="M20 6 9 17l-5-5"></path>
+                    </svg>
+                    See my score
+                </button>
+            </div>
+
+            <div class="questionnaire-result is-hidden" id="questionnaire-result">
+                <h3 id="questionnaire-result-heading">Your questionnaire score</h3>
+                <div id="questionnaire-scores"></div>
+                <p class="questionnaire-band" id="questionnaire-band"></p>
+                <p class="questionnaire-caveat" id="questionnaire-caveat"></p>
+                <p class="questionnaire-storage" id="questionnaire-storage"></p>
+            </div>
+        </section>
+
+        <!--
             Transparency and deletion (F2). Hidden until consent exists, because there is
             nothing to show or delete before then.
         -->
