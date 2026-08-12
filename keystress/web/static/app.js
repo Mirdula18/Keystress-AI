@@ -126,6 +126,28 @@ function sourceQualifier(dataSource) {
     return 'on data of unknown origin';
 }
 
+// Result icons as inline SVGs (stroke-based, currentColor). Replaces the Font
+// Awesome glyphs so the page needs no icon font. Each string is self-contained
+// and aria-hidden; the surrounding .result-icon circle already conveys meaning.
+const RESULT_ICON_SVGS = {
+    low: '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+        'aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>',
+    medium: '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+        'aria-hidden="true" focusable="false"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>' +
+        '<path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+    high: '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+        'aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+};
+
+const RESULT_ICON_UNKNOWN =
+    '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>' +
+    '<path d="M12 17h.01"/></svg>';
+
 function displayResults(result) {
     // Hide loader, show results
     document.getElementById('loader-card').classList.remove('show');
@@ -145,7 +167,7 @@ function displayResults(result) {
     // Insufficient signal: say so plainly rather than rendering an invented score.
     if (result.insufficient_data) {
         icon.className = 'result-icon medium';
-        icon.innerHTML = '<i class="fas fa-question"></i>';
+        icon.innerHTML = RESULT_ICON_UNKNOWN;
         levelEl.textContent = result.label;
         levelEl.className = 'result-level medium';
         document.getElementById('result-confidence').textContent = '';
@@ -160,12 +182,7 @@ function displayResults(result) {
     probabilitySection.style.display = 'block';
 
     icon.className = 'result-icon ' + result.level_class;
-    const iconMap = {
-        'low': 'fa-check',
-        'medium': 'fa-exclamation',
-        'high': 'fa-times'
-    };
-    icon.innerHTML = '<i class="fas ' + iconMap[result.level_class] + '"></i>';
+    icon.innerHTML = RESULT_ICON_SVGS[result.level_class] || RESULT_ICON_UNKNOWN;
 
     levelEl.textContent = result.label;
     levelEl.className = 'result-level ' + result.level_class;

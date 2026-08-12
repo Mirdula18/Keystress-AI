@@ -39,7 +39,12 @@
         <!-- Typing Test Card -->
         <section class="card" id="test-card" aria-labelledby="test-heading">
             <div class="card-header">
-                <i class="fas fa-keyboard" aria-hidden="true"></i>
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                    <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M9 14h6"></path>
+                </svg>
                 <h2 id="test-heading">Typing Session</h2>
             </div>
 
@@ -71,10 +76,22 @@
 
             <div class="btn-group">
                 <button type="button" class="btn btn-secondary" onclick="resetTest()">
-                    <i class="fas fa-redo"></i> Reset
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                        <path d="M21 3v5h-5"></path>
+                    </svg>
+                    Reset
                 </button>
                 <button type="button" class="btn btn-primary" id="analyze-btn" onclick="analyzeTyping()" disabled>
-                    <i class="fas fa-chart-line"></i> Analyze Typing Session
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                        <polyline points="16 7 22 7 22 13"></polyline>
+                    </svg>
+                    Analyze Typing Session
                 </button>
             </div>
 
@@ -83,7 +100,11 @@
             </p>
 
             <div class="privacy-notice">
-                <i class="fas fa-shield-alt"></i>
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
                 <p><strong>Privacy First:</strong> We only analyze timing patterns between keystrokes. Your actual typed content is never stored or transmitted. Your privacy is our priority.</p>
             </div>
         </div>
@@ -99,7 +120,11 @@
             <h2 class="sr-only">Session results</h2>
             <div class="result-header">
                 <div class="result-icon" id="result-icon">
-                    <i class="fas fa-check"></i>
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <path d="M20 6 9 17l-5-5"></path>
+                    </svg>
                 </div>
                 <div class="result-level" id="result-level"></div>
                 <div class="result-confidence" id="result-confidence"></div>
@@ -142,12 +167,24 @@
 
             <div class="btn-group">
                 <button type="button" class="btn btn-primary" onclick="newTest()">
-                    <i class="fas fa-redo"></i> Run Another Session
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                        <path d="M21 3v5h-5"></path>
+                    </svg>
+                    Run Another Session
                 </button>
             </div>
 
             <div class="privacy-notice disclaimer-notice">
-                <i class="fas fa-info-circle"></i>
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 16v-4"></path>
+                    <path d="M12 8h.01"></path>
+                </svg>
                 <p><strong>Disclaimer:</strong> <span id="disclaimer-text"></span></p>
             </div>
         </section>
