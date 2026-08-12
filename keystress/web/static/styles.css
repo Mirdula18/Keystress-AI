@@ -448,3 +448,23 @@ body {
     white-space: nowrap;
     border: 0;
 }
+
+/* Skip link: invisible until focused, then the first thing a keyboard user
+ * sees. Jumps straight to the main landmark, skipping the header. */
+.skip-link {
+    position: absolute;
+    top: -100px;
+    left: 1rem;
+    z-index: 100;
+    padding: 0.75rem 1.25rem;
+    background: var(--primary);
+    color: white;
+    border-radius: 0 0 12px 12px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top 0.2s ease;
+}
+
+.skip-link:focus {
+    top: 0;
+}
