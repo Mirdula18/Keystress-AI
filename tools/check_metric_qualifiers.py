@@ -362,6 +362,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # The offending line is echoed back verbatim, and this repository's prose contains
+    # arrows, en dashes, and curly quotes. On a Windows console (cp1252 by default) that
+    # raises UnicodeEncodeError *while reporting a violation* — so the check crashed with
+    # a traceback instead of naming the problem, and exited non-zero for the wrong reason.
+    # Found exactly that way. Replacing unencodable characters is right here: a mangled
+    # character in a diagnostic is a far smaller problem than losing the diagnostic.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+
     repo_root = Path(__file__).resolve().parent.parent
     roots = args.paths if args.paths else [repo_root]
 
