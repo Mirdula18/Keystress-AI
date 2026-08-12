@@ -609,3 +609,59 @@ silent — a blocked handler is a button that does nothing, with no visible erro
 by test rather than by review. F14 must keep the policy intact when it introduces a production
 server, and any future embedded chart or third-party widget is now a decision to re-open this one,
 not a detail.
+
+---
+
+## D-024 — F4 harness: pairing is explicit, the score is the participant's, and the model stays out of it
+
+**Phase 1 · `feat/F4-real-data-harness`**
+
+**Context.** F4 is the feature the rest of the project is scaffolding for: without real labelled
+sessions, every number this system produces describes a hand-authored generator. D-019 set the
+shape (a public, consent-gated donation site) and D-020 the instrument (CBI). This records the
+design decisions taken while building it.
+
+**Decision.** Five, each of which had a plausible cheaper alternative:
+
+- **A response names the donation it labels.** `responses.donation_id` is an explicit foreign key,
+  and `save_response` refuses a donation belonging to a different participant. The cheaper option —
+  join a participant's questionnaire to whichever session is nearest in time — works fine until
+  someone contributes twice, and then silently mislabels rows. A wrong label is the one kind of bad
+  row nothing downstream can detect: it does not look malformed, it looks like evidence.
+
+- **The participant sees their questionnaire score and no model output.** Returning the typing
+  model's prediction alongside a real self-report costs nothing technically and would make the page
+  feel more impressive. It is refused because the two numbers side by side assert a relationship
+  that has never been demonstrated — precisely the claim F5 exists to test. Tests assert the
+  questionnaire response carries no `prediction`, `probabilities`, or `confidence` field, and that
+  the result panel renders none.
+
+- **The exported dataset omits the model's prediction, though the store keeps it.** Auditing wants
+  it; the dataset must not have it. A CSV containing both the real label and the current model's
+  guess is one careless join from training on its own output, which manufactures exactly the
+  circularity F4 exists to break. Keeping it in the database preserves the audit trail without
+  putting it in the file people load into pandas.
+
+- **Every item is required; partial responses are refused.** The instrument's own guidance permits
+  averaging the answered items when fewer than half are missing, which is right for a paper form
+  handed out in a room. A web form can simply require all thirteen, and a partial record would be a
+  different measurement wearing an identical shape in the exported CSV.
+
+- **`describe()` returns warnings as data and the CLI prints them under "THIS DATASET IS NOT YET
+  EVIDENCE".** Too few sessions, too few participants, an absent class, one dominant participant.
+  Stating these where the file is produced is the difference between an honest dataset and one
+  whose limitations live only in a document nobody opens.
+
+**Rationale.** The acceptance criteria ("collect and store consented, labelled real sessions with
+no content capture") are satisfiable by a much smaller implementation. Each decision above is a
+place where the smaller version would have been quietly misleading rather than wrong.
+
+**Consequences.** The dataset carries no demographics, so F9's subgroup fairness analysis is
+impossible on it — a deliberate trade (collecting sensitive attributes from anonymous volunteers to
+check for bias creates the risk it investigates) that must be reported as a limitation, not
+omitted. `docs/STUDY_PROTOCOL.md` is now a load-bearing document: it states the adaptation, the
+retention rule, and the threats to validity that any writeup must repeat. The weakest link in the
+deletion promise is exported files, which live outside the deletion path — a handling obligation
+the protocol names explicitly, since no code change can fix it. F5 depends on `labelled_records()`
+carrying `participant_id`; F8 must bump the feature-set version rather than change what the five
+columns mean, because exported files already claim `feature_set = v1`.

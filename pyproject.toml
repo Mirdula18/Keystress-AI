@@ -45,6 +45,7 @@ Documentation = "https://github.com/Mirdula18/Keystress-AI/tree/main/docs"
 [project.scripts]
 keystress = "keystress.__main__:main"
 keystress-train = "keystress.ml.train:main"
+keystress-export = "keystress.research.dataset:main"
 
 [tool.setuptools.packages.find]
 include = ["keystress*"]
@@ -93,5 +94,6 @@ ignore = [
 "keystress/__main__.py" = ["T20"]
 "keystress/ml/train.py" = ["T20"]
 "keystress/ml/synthetic.py" = ["T20"]
+"keystress/research/dataset.py" = ["T20"]
 "tools/*.py" = ["T20"]
 "tests/*.py" = ["T20"]

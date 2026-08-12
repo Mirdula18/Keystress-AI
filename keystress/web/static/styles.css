@@ -517,6 +517,144 @@ body {
     border-left: 5px solid var(--secondary);
 }
 
+/* Research questionnaire (F4) */
+.questionnaire-card {
+    border-left: 5px solid var(--success);
+}
+
+.questionnaire-intro {
+    font-size: 0.95rem;
+    color: var(--text);
+    line-height: 1.7;
+    margin-bottom: var(--space-4);
+}
+
+/* The citation and adaptation note. Small, but never absent: an instrument shown
+ * without its provenance is being misused, however tidy the page looks. */
+.instrument-provenance {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-bottom: var(--space-5);
+}
+
+.instrument-provenance span {
+    display: block;
+}
+
+.question-group {
+    margin-bottom: var(--space-6);
+}
+
+.question-group h3 {
+    font-size: 1rem;
+    color: var(--text);
+    margin-bottom: var(--space-1);
+}
+
+.question-group-description {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-4);
+}
+
+/* A fieldset per question: the legend gives assistive technology the question text
+ * alongside each option, instead of five unexplained labels in a row. */
+.question {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-4);
+    margin-bottom: var(--space-3);
+}
+
+.question legend {
+    padding: 0 var(--space-2);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.question-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+
+.question-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+    font-size: 0.8rem;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.question-option:hover {
+    border-color: var(--primary);
+}
+
+.question-option input[type="radio"] {
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.questionnaire-progress {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: var(--space-3);
+}
+
+.questionnaire-result {
+    margin-top: var(--space-5);
+    padding: var(--space-5);
+    background: var(--surface-muted);
+    border-radius: var(--radius-md);
+}
+
+.questionnaire-result h3 {
+    font-size: 1rem;
+    margin-bottom: var(--space-4);
+    color: var(--text);
+}
+
+.score-row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+    color: var(--text);
+}
+
+.questionnaire-band {
+    margin-top: var(--space-4);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* The caveat is not fine print here: it is the sentence that stops a band from being
+ * read as a diagnosis, so it stays legible rather than being shrunk away. */
+.questionnaire-caveat {
+    margin-top: var(--space-3);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
+.questionnaire-storage {
+    margin-top: var(--space-3);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
 /* Deletion is irreversible, so its control is styled as the serious action it is. */
 .btn-danger {
     background: var(--danger);

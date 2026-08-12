@@ -149,10 +149,12 @@ def create_app(settings: Settings | None = None,
     from .api.consent import bp as consent_bp
     from .api.health import bp as health_bp
     from .api.predict import bp as predict_bp
+    from .api.research import bp as research_bp
 
     app.register_blueprint(predict_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(consent_bp)
+    app.register_blueprint(research_bp)
 
     @app.route("/")
     def index() -> str:

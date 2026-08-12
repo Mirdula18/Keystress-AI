@@ -94,6 +94,50 @@ instead of merely claiming to.
 - `tests/test_accessibility.py` — pairs each affordance in the markup with the code obliged to
   honour it, so none can quietly go back to being decorative.
 
+### F4 — Real-data collection harness & study protocol
+
+The feature the rest of the project was scaffolding for: a way to obtain typing sessions with
+*real* labels, so the model can eventually be judged against people rather than against a
+generator's own authored classes.
+
+**Added**
+- `keystress/research/instrument.py` — a studies-adapted short form of the Copenhagen Burnout
+  Inventory (Kristensen et al., 2005) as versioned content: 13 items, both response scales on the
+  0-100 anchors, one reverse-scored item. Citation, licence note, adaptation note, and disclaimer
+  travel inside the API payload, so a page cannot render the questions without them.
+- `keystress/research/scoring.py` — subscale means, overall score, and the banded class label
+  (below 50 / 50-74 / 75+). `LABEL_CAVEAT` accompanies every band: these are a reporting
+  convention, not diagnostic thresholds.
+- `keystress/research/dataset.py` — the `labelled-v1` schema, CSV/JSONL export, and a `describe()`
+  that returns the reasons a dataset is not yet evidence. New `keystress-export` CLI.
+- `keystress/api/research.py` — `GET /api/instrument`, `POST /api/questionnaire`. The instrument is
+  public (reading what you will be asked is part of informed consent); submission requires analysis
+  consent; storage requires the separate donate opt-in, and the reply states which happened.
+- `responses` table joined to `donations` by `donation_id`, with `participant_id` as the grouping
+  key F5 needs. `participant_summary` now returns responses too, and deletion cascades to them.
+- The questionnaire step in the page: rendered from the instrument payload with
+  createElement/textContent, a fieldset of radios per item, a live answered-count, and a result
+  panel showing subscale scores "out of 100" with the caveat and the storage outcome.
+- `docs/STUDY_PROTOCOL.md` — consent, anonymisation, retention, withdrawal, the dataset schema,
+  and a threats-to-validity section stating up front that self-selection, one-session measurement,
+  uncontrolled conditions, a copy-typing task, and an adapted instrument all limit what this data
+  can show.
+- `tests/test_research_*.py`, `tests/test_questionnaire_ui.py`, and six new privacy tests covering
+  the research path from the public instrument payload to the exported CSV.
+
+**Changed**
+- The instrument payload uses `question` and `score` rather than `text` and `value`. Both old names
+  are on the forbidden-field list — they are what a leaked input arrives under — and using them for
+  harmless data would make every content scan of that payload a false positive.
+
+**Not included, deliberately**
+- No demographic fields, so F9's subgroup fairness analysis is impossible on this dataset. Stated
+  as a limitation in the protocol rather than quietly omitted.
+- No typing-model output beside the questionnaire score, and none in the exported dataset (D-024).
+
+**Decisions.** D-024 (explicit pairing, the participant's own score, and keeping the model out of
+both the result page and the dataset).
+
 ### F3 — Privacy hardening & local-first defaults
 
 Defence-in-depth for the serving path, ahead of the project moving from a localhost tool toward a

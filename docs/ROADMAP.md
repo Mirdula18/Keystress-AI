@@ -47,8 +47,11 @@ Make it safe to put in front of a person, and start breaking the synthetic circu
 - [x] **F3 — Privacy hardening & local-first defaults** (localhost bind, validation, rate limit,
       no CDN requirement on the core path). *Body cap → 413, per-client rate limit → 429, security
       headers, prediction path CDN-free. See `CHANGELOG.md` F3 and D-021.*
-- [ ] **F4 — Real-data collection harness & study protocol** (consented, labeled, content-free;
-      offline research path; cite the chosen wellbeing instrument).
+- [x] **F4 — Real-data collection harness & study protocol.** *Consent-gated donation site
+      (D-019): studies-adapted CBI (D-020) as versioned content, questionnaire responses paired to
+      donated sessions, `labelled-v1` export with participant grouping keys, and
+      `docs/STUDY_PROTOCOL.md`. No data collected yet — the harness exists, the study has not run.
+      See `CHANGELOG.md` F4 and D-024.*
 - [ ] **F5 — Validation harness** (participant-grouped splits, trivial baselines, calibration,
       eval report per model version).
 
