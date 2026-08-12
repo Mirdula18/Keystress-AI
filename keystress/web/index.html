@@ -68,20 +68,20 @@
             </div>
 
             <label class="consent-option">
-                <input type="checkbox" id="consent-analysis" onchange="updateConsentButton()">
+                <input type="checkbox" id="consent-analysis">
                 <span><strong>Required.</strong> I agree to have this session&rsquo;s typing
                 <em>timing</em> analysed. My typed text is never captured.</span>
             </label>
 
             <label class="consent-option">
-                <input type="checkbox" id="consent-donate" onchange="updateConsentButton()">
+                <input type="checkbox" id="consent-donate">
                 <span><strong>Optional.</strong> Also store this session&rsquo;s timing features
                 for research. Leave this unticked and nothing is stored at all. You can view or
                 delete anything stored at any time.</span>
             </label>
 
             <div class="btn-group">
-                <button type="button" class="btn btn-primary" id="consent-btn" onclick="grantConsent()" disabled>
+                <button type="button" class="btn btn-primary" id="consent-btn" disabled>
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -134,7 +134,7 @@
             </div>
 
             <div class="btn-group">
-                <button type="button" class="btn btn-secondary" onclick="resetTest()">
+                <button type="button" class="btn btn-secondary" id="reset-btn">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -143,7 +143,7 @@
                     </svg>
                     Reset
                 </button>
-                <button type="button" class="btn btn-primary" id="analyze-btn" onclick="analyzeTyping()" disabled>
+                <button type="button" class="btn btn-primary" id="analyze-btn" disabled>
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -228,7 +228,7 @@
             <div class="donation-note" id="donation-note"></div>
 
             <div class="btn-group">
-                <button type="button" class="btn btn-primary" onclick="newTest()">
+                <button type="button" class="btn btn-primary" id="new-test-btn">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -270,14 +270,14 @@
             <p id="data-status"></p>
 
             <label class="consent-option">
-                <input type="checkbox" id="donate-toggle" onchange="changeDonateConsent()">
+                <input type="checkbox" id="donate-toggle">
                 <span>Store my sessions&rsquo; timing features for research (you can turn this
                 off at any time; turning it off stops new storage and does not delete what is
                 already there).</span>
             </label>
 
             <div class="btn-group">
-                <button type="button" class="btn btn-secondary" onclick="viewMyData()">
+                <button type="button" class="btn btn-secondary" id="view-data-btn">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -286,7 +286,7 @@
                     </svg>
                     Show everything stored about me
                 </button>
-                <button type="button" class="btn btn-danger" id="delete-btn" onclick="deleteMyData()">
+                <button type="button" class="btn btn-danger" id="delete-btn">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">

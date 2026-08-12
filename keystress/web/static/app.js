@@ -25,6 +25,44 @@ typingArea.addEventListener('keydown', recordKeyDown);
 typingArea.addEventListener('input', updateStats);
 
 // -------------------------------------------------------------------------------------
+// Control bindings (F16)
+//
+// Every control used to carry an inline `onclick`/`onchange` attribute, which forced the
+// Content-Security-Policy to allow 'unsafe-inline' scripts — the one directive that
+// meaningfully weakens a CSP, since it re-permits exactly the injected inline script the
+// policy exists to stop. Binding here instead lets `script-src` be plain 'self'.
+//
+// Table-driven so adding a control means adding a row, not remembering to also add a
+// listener; a missing element is reported rather than silently unbound.
+// -------------------------------------------------------------------------------------
+
+const CONTROL_BINDINGS = [
+    ['consent-analysis', 'change', updateConsentButton],
+    ['consent-donate', 'change', updateConsentButton],
+    ['consent-btn', 'click', grantConsent],
+    ['reset-btn', 'click', resetTest],
+    ['analyze-btn', 'click', analyzeTyping],
+    ['new-test-btn', 'click', newTest],
+    ['donate-toggle', 'change', changeDonateConsent],
+    ['view-data-btn', 'click', viewMyData],
+    ['delete-btn', 'click', deleteMyData]
+];
+
+function bindControls() {
+    CONTROL_BINDINGS.forEach(function (binding) {
+        const element = document.getElementById(binding[0]);
+        if (!element) {
+            // A renamed id would otherwise produce a dead button with no clue why.
+            console.error('Keystress: no element #' + binding[0] + ' to bind');
+            return;
+        }
+        element.addEventListener(binding[1], binding[2]);
+    });
+}
+
+bindControls();
+
+// -------------------------------------------------------------------------------------
 // Consent (F2)
 //
 // The participant token is an opaque UUID minted by POST /api/consent. It is the only
