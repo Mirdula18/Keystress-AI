@@ -119,10 +119,18 @@ class ResponseScale:
         return frozenset(value for _, value in self.options)
 
     def as_payload(self) -> dict[str, Any]:
-        """Render for the API, as a list of ``{label, value}`` objects."""
+        """
+        Render for the API, as a list of ``{label, score}`` objects.
+
+        The key is ``score`` rather than the obvious ``value`` because ``value`` is on the
+        project's forbidden-field list (:data:`keystress.core.collect.FORBIDDEN_EVENT_FIELDS`)
+        — it is one of the names a leaked input field would arrive under. Using it here for
+        something harmless would make every content scan of this payload a false positive,
+        and a scan that cries wolf is one someone eventually weakens.
+        """
         return {
             "name": self.name,
-            "options": [{"label": label, "value": value} for label, value in self.options],
+            "options": [{"label": label, "score": score} for label, score in self.options],
         }
 
 
@@ -200,11 +208,17 @@ class Item:
     reverse: bool = False
 
     def as_payload(self) -> dict[str, Any]:
-        """Render for the API. `reverse` is deliberately included: the scoring rule is
-        not a secret, and hiding it would make the score harder to audit, not safer."""
+        """
+        Render for the API.
+
+        ``reverse`` is deliberately included: the scoring rule is not a secret, and hiding
+        it would make the score harder to audit, not safer. The question is sent as
+        ``question``, not ``text``, for the same reason the scale sends ``score`` rather
+        than ``value`` — see :meth:`ResponseScale.as_payload`.
+        """
         return {
             "id": self.id,
-            "text": self.text,
+            "question": self.text,
             "subscale": self.subscale,
             "scale": self.scale.name,
             "reverse": self.reverse,

@@ -450,6 +450,121 @@ class TestDonationStorageDiscardsContent:
         assert_no_content(stored, "directly-saved donation features")
 
 
+class TestResearchPathDiscardsContent:
+    """
+    The questionnaire and the dataset export are content-free too (F4).
+
+    The research path is where the project stores the most about a person: a typing
+    session *and* a self-report, joined. That makes it the most attractive place for a
+    content-bearing field to be added "just for context" — a free-text comment, a
+    reconstructed sample of what was typed, the raw events "for later analysis". None of
+    those exist, and these tests are what keeps it that way.
+    """
+
+    def _consent(self, client, *, donate: bool = True) -> str:
+        return client.post(
+            "/api/consent", json={"analysis": True, "donate": donate}
+        ).get_json()["participant_id"]
+
+    def _complete_answers(self) -> dict[str, int]:
+        from keystress.research.instrument import ITEMS
+
+        return {item.id: 50 for item in ITEMS}
+
+    def test_instrument_payload_carries_no_content_field(self, client) -> None:
+        """Served to everyone, before consent — so it must be clean by construction."""
+        assert_no_content(client.get("/api/instrument").get_json(), "instrument payload")
+
+    def test_questionnaire_rejects_content_bearing_answers(self, client) -> None:
+        """
+        A hostile client sending text where a scale value belongs is refused, not
+        coerced. Accepting it would put free text one `str()` away from the database.
+        """
+        participant_id = self._consent(client)
+        answers = self._complete_answers()
+        answers["p1"] = SECRET_TEXT
+
+        response = client.post(
+            "/api/questionnaire",
+            json={"responses": answers},
+            headers={"X-Consent-Id": participant_id},
+        )
+        assert response.status_code == 400
+        assert_no_content(response.get_json(), "questionnaire error response")
+
+    def test_extra_submitted_fields_never_reach_storage(self, client, store) -> None:
+        participant_id = self._consent(client)
+        response = client.post(
+            "/api/questionnaire",
+            json={
+                "responses": self._complete_answers(),
+                "notes": SECRET_TEXT,
+                "typed_text": SECRET_TEXT,
+                "keystroke_events": hostile_events(5),
+            },
+            headers={"X-Consent-Id": participant_id},
+        )
+        assert response.status_code == 200
+
+        assert_no_content(store.participant_summary(participant_id), "stored summary")
+        raw = Path(store.path).read_bytes().lower()
+        for token in SECRET_TOKENS:
+            assert token.lower().encode() not in raw, f"database file contains {token!r}"
+
+    def test_a_stored_response_holds_only_scale_values(self, client, store) -> None:
+        from keystress.research.instrument import REQUIRED_ITEM_IDS
+
+        participant_id = self._consent(client)
+        client.post(
+            "/api/questionnaire",
+            json={"responses": self._complete_answers()},
+            headers={"X-Consent-Id": participant_id},
+        )
+
+        stored = store.list_responses(participant_id)[0]
+        assert set(stored["item_scores"]) <= REQUIRED_ITEM_IDS
+        assert all(isinstance(value, int) for value in stored["item_scores"].values())
+
+    def test_the_exported_dataset_is_content_free(self, client, store, tmp_path) -> None:
+        """The last boundary: the file that leaves the machine."""
+        from keystress.research.dataset import export
+
+        participant_id = self._consent(client)
+        donation = client.post(
+            "/api/donate",
+            json={"keystroke_events": hostile_events()},
+            headers={"X-Consent-Id": participant_id},
+        ).get_json()["donation_id"]
+        client.post(
+            "/api/questionnaire",
+            json={"responses": self._complete_answers(), "donation_id": donation},
+            headers={"X-Consent-Id": participant_id},
+        )
+
+        path = tmp_path / "labelled.csv"
+        export(store, path)
+        text = path.read_text(encoding="utf-8")
+
+        for token in SECRET_TOKENS:
+            assert token.lower() not in text.lower(), f"export contains {token!r}"
+
+    def test_the_research_modules_read_no_content_bearing_field(self) -> None:
+        """
+        Source-level guard, matching the one over `core`: no module in the research
+        package may index a content-bearing key out of anything.
+        """
+        from keystress.research import dataset, instrument, scoring
+
+        for module in (instrument, scoring, dataset):
+            code = Path(module.__file__).read_text(encoding="utf-8")
+            for name in ("key", "char", "code", "keyCode", "which", "text", "clipboard"):
+                for pattern in (f'["{name}"]', f"['{name}']", f'.get("{name}"',
+                                f".get('{name}'"):
+                    assert pattern not in code, (
+                        f"{module.__name__} reads content-bearing field via {pattern}"
+                    )
+
+
 class TestSuiteIntegrity:
     """
     Guard the guard.
@@ -461,7 +576,7 @@ class TestSuiteIntegrity:
 
     #: Floor on the number of privacy assertions. Raise it when tests are added; lowering
     #: it should require explaining which guarantee is being given up.
-    MINIMUM_PRIVACY_TESTS = 30
+    MINIMUM_PRIVACY_TESTS = 36
 
     def test_suite_has_not_been_emptied(self) -> None:
         import sys

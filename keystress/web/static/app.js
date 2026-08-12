@@ -397,7 +397,7 @@ function renderItem(item, scale) {
     fieldset.dataset.itemId = item.id;
 
     const legend = document.createElement('legend');
-    legend.textContent = item.text;
+    legend.textContent = item.question;
     fieldset.appendChild(legend);
 
     const options = document.createElement('div');
@@ -410,7 +410,7 @@ function renderItem(item, scale) {
         const input = document.createElement('input');
         input.type = 'radio';
         input.name = 'item-' + item.id;
-        input.value = String(option.value);
+        input.value = String(option.score);
         input.addEventListener('change', updateQuestionnaireProgress);
 
         const text = document.createElement('span');

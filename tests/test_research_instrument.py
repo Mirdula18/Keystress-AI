@@ -134,7 +134,7 @@ class TestPayload:
         assert set(scales) == {"frequency", "degree"}
         for scale in scales.values():
             assert len(scale["options"]) == 5
-            assert {option["value"] for option in scale["options"]} == {0, 25, 50, 75, 100}
+            assert {option["score"] for option in scale["options"]} == {0, 25, 50, 75, 100}
 
     def test_payload_contains_no_free_text_field(self) -> None:
         """
