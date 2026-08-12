@@ -468,3 +468,8 @@ body {
 .skip-link:focus {
     top: 0;
 }
+
+/* Shown only when JavaScript is disabled, so the page still explains itself. */
+.noscript {
+    border-left: 5px solid var(--warning);
+}
