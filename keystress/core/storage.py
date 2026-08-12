@@ -56,12 +56,50 @@ CREATE TABLE IF NOT EXISTS donations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_donations_participant ON donations(participant_id);
+
+-- Questionnaire responses (F4). This is the *label* side of the labelled dataset: a
+-- donation supplies the typing features, a response supplies the self-reported burnout
+-- score, and `donation_id` pairs them.
+--
+-- `items_json` holds integer scale values keyed by item id and nothing else. There is no
+-- free-text column here by design: a comments box is the one field that could carry
+-- content, and it would be the obvious place for it to arrive.
+CREATE TABLE IF NOT EXISTS responses (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id     TEXT NOT NULL REFERENCES participants(participant_id) ON DELETE CASCADE,
+    donation_id        INTEGER REFERENCES donations(id) ON DELETE CASCADE,
+    created_at         TEXT NOT NULL,
+    instrument_version TEXT NOT NULL,
+    items_json         TEXT NOT NULL,
+    personal_score     REAL NOT NULL,
+    studies_score      REAL NOT NULL,
+    overall_score      REAL NOT NULL,
+    label              INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_responses_participant ON responses(participant_id);
+CREATE INDEX IF NOT EXISTS idx_responses_donation ON responses(donation_id);
 """
 
 
 def _now() -> str:
     """Return an ISO-8601 UTC timestamp."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def _response_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    """Convert a `responses` row to the shape the API and export share."""
+    return {
+        "id": row["id"],
+        "donation_id": row["donation_id"],
+        "created_at": row["created_at"],
+        "instrument_version": row["instrument_version"],
+        "item_scores": json.loads(row["items_json"]),
+        "personal_score": row["personal_score"],
+        "studies_score": row["studies_score"],
+        "overall_score": row["overall_score"],
+        "label": row["label"],
+    }
 
 
 class Store:
@@ -240,19 +278,171 @@ class Store:
             for row in rows
         ]
 
+    # -- questionnaire responses (F4) ------------------------------------------------
+
+    def save_response(
+        self,
+        participant_id: str,
+        result: Any,
+        *,
+        donation_id: int | None = None,
+    ) -> int:
+        """
+        Persist a scored questionnaire response.
+
+        Like :meth:`save_donation`, this is gated on donate consent and filters what it
+        writes. Only integer scale values keyed by a *known* item id are stored; anything
+        else in ``result.item_scores`` is dropped at the boundary. A questionnaire is a
+        richer object than a feature vector, so the filter matters more here, not less.
+
+        Parameters:
+            participant_id: The responding participant. Must have donate consent.
+            result: A :class:`keystress.research.scoring.ScoreResult`.
+            donation_id: The typing donation this response labels, when there is one.
+                A response with no donation is still worth keeping - it is a valid
+                questionnaire, just not part of a labelled pair - so this is nullable
+                rather than required.
+
+        Returns:
+            int: The new response row id.
+
+        Raises:
+            PermissionError: If the participant lacks donate consent.
+            ValueError: If ``donation_id`` belongs to a different participant. Pairing
+                one person's typing with another's questionnaire would produce a
+                confidently mislabelled training row, which is worse than no row.
+        """
+        from ..research.instrument import REQUIRED_ITEM_IDS
+        from ..research.scoring import SUBSCALES
+
+        if not self.has_donate_consent(participant_id):
+            raise PermissionError("Participant has not consented to donation.")
+
+        if donation_id is not None and not self._owns_donation(participant_id, donation_id):
+            raise ValueError(
+                f"Donation {donation_id} does not belong to participant {participant_id}"
+            )
+
+        safe_items = {
+            item_id: int(value)
+            for item_id, value in result.item_scores.items()
+            if item_id in REQUIRED_ITEM_IDS
+        }
+        scores = result.subscale_scores
+
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "INSERT INTO responses (participant_id, donation_id, created_at, "
+                "instrument_version, items_json, personal_score, studies_score, "
+                "overall_score, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    participant_id,
+                    donation_id,
+                    _now(),
+                    result.instrument_version,
+                    json.dumps(safe_items),
+                    float(scores[SUBSCALES[0]]),
+                    float(scores[SUBSCALES[1]]),
+                    float(result.overall_score),
+                    int(result.label),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def _owns_donation(self, participant_id: str, donation_id: int) -> bool:
+        """Report whether a donation row belongs to this participant."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM donations WHERE id = ? AND participant_id = ?",
+                (donation_id, participant_id),
+            ).fetchone()
+        return row is not None
+
+    def list_responses(self, participant_id: str) -> list[dict[str, Any]]:
+        """Return every questionnaire response for a participant, newest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM responses WHERE participant_id = ? ORDER BY id DESC",
+                (participant_id,),
+            ).fetchall()
+        return [_response_row_to_dict(row) for row in rows]
+
+    def labelled_records(self) -> list[dict[str, Any]]:
+        """
+        Return every donation paired with the questionnaire response that labels it.
+
+        This is the labelled real dataset (F4) in row form:
+        :mod:`keystress.research.dataset` turns it into a file, and F5 evaluates against
+        it. Only paired rows are returned - a typing donation with no questionnaire has
+        no label, and a questionnaire with no donation has no features.
+
+        The join is on ``donation_id`` rather than on "same participant, nearby time",
+        because a participant may contribute many sessions and guessing which
+        questionnaire belongs to which session would silently mislabel rows.
+
+        Returns:
+            list[dict]: One record per labelled pair, ordered oldest first so an export
+            is stable across runs. ``participant_id`` is included as the grouping key F5
+            needs to keep one person out of both sides of a split.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT d.participant_id AS participant_id, d.id AS donation_id, "
+                "       d.created_at AS session_created_at, d.feature_set AS feature_set, "
+                "       d.features_json AS features_json, d.data_source AS data_source, "
+                "       d.prediction AS prediction, "
+                "       r.id AS response_id, r.created_at AS response_created_at, "
+                "       r.instrument_version AS instrument_version, "
+                "       r.personal_score AS personal_score, r.studies_score AS studies_score, "
+                "       r.overall_score AS overall_score, r.label AS label "
+                "FROM donations d "
+                "JOIN responses r ON r.donation_id = d.id "
+                "ORDER BY d.id ASC"
+            ).fetchall()
+
+        return [
+            {
+                "participant_id": row["participant_id"],
+                "donation_id": row["donation_id"],
+                "response_id": row["response_id"],
+                "session_created_at": row["session_created_at"],
+                "response_created_at": row["response_created_at"],
+                "feature_set": row["feature_set"],
+                "features": json.loads(row["features_json"]),
+                "instrument_version": row["instrument_version"],
+                "personal_score": row["personal_score"],
+                "studies_score": row["studies_score"],
+                "overall_score": row["overall_score"],
+                "label": row["label"],
+                "model_data_source": row["data_source"],
+                "model_prediction": row["prediction"],
+            }
+            for row in rows
+        ]
+
     # -- transparency & deletion -----------------------------------------------------
 
     def participant_summary(self, participant_id: str) -> dict[str, Any] | None:
         """
         Return everything stored about a participant, for the "view my data" endpoint.
 
+        "Everything" is meant literally: every table that can hold a row about this
+        person appears here. When F4 added questionnaire responses, leaving them out
+        would have turned an honest transparency endpoint into a partial one — the worst
+        kind, because it looks complete.
+
         Returns:
-            dict | None: Consent record plus all donations, or ``None`` if unknown.
+            dict | None: Consent record, donations, and questionnaire responses, or
+            ``None`` if the participant is unknown.
         """
         record = self.get_participant(participant_id)
         if record is None:
             return None
-        return {**record, "donations": self.list_donations(participant_id)}
+        return {
+            **record,
+            "donations": self.list_donations(participant_id),
+            "responses": self.list_responses(participant_id),
+        }
 
     def delete_participant(self, participant_id: str) -> bool:
         """
