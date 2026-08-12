@@ -99,6 +99,11 @@ Configuration (all optional, safe defaults):
 | `KEYSTRESS_DEBUG` | `false` | Flask debug mode. |
 | `KEYSTRESS_LOG_LEVEL` | `INFO` | Application log level. |
 | `KEYSTRESS_AUTO_TRAIN` | `true` | Train from synthetic data at startup when no model is found. |
+| `KEYSTRESS_MAX_CONTENT_LENGTH` | `1048576` | Max request body in bytes; larger payloads get `413` before parsing (F3). |
+| `KEYSTRESS_RATE_LIMIT` | `60/minute` | Per-client limit on `/api/predict`; over-limit gets `429` (F3). |
+| `KEYSTRESS_RATE_LIMIT_ENABLED` | `true` | Master switch for rate limiting (F3). |
+| `KEYSTRESS_STORE_PATH` | `data/keystress.db` | Consent records and opt-in donations (F2). Local-only; never committed. |
+| `KEYSTRESS_REQUIRE_CONSENT` | `true` | Refuse `/api/predict` without a recorded consent (F2). Leave on; `false` exists for tests. |
 
 Docker (after F15): `docker compose up`.
 
@@ -110,8 +115,9 @@ Docker (after F15): `docker compose up`.
 keystress/
 ├── app.py          # Flask application factory
 ├── config.py       # env-driven settings; loopback default
-├── api/            # HTTP layer: predict, health/readyz
-├── core/           # domain: collect (privacy boundary), features, model loader, inference
+├── api/            # HTTP layer: predict, health/readyz, consent/donate/delete
+├── core/           # domain: collect (privacy boundary), features, model loader, inference,
+│                   #         consent policy, consent+donation store
 ├── ml/             # offline: synthetic generation, training  (never on the serving path)
 └── web/            # extracted frontend (F10)
 tools/              # repository checks (metric qualifiers)

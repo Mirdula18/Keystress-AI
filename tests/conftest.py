@@ -9,6 +9,7 @@ disk — the thing the inherited module-level globals made impossible (D-009).
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -16,13 +17,42 @@ import pytest
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 
+import keystress.app
 from keystress.app import create_app
+from keystress.config import PROJECT_ROOT
 from keystress.core.model import ModelBundle, ModelRegistry
+from keystress.core.storage import Store
 from keystress.ml.synthetic import generate_synthetic_typing_data
 from keystress.ml.train import FEATURE_COLUMNS
 
 #: Deterministic seed for every fixture, so failures are reproducible.
 TEST_SEED = 1234
+
+
+@pytest.fixture(autouse=True)
+def forbid_the_real_store(monkeypatch) -> None:
+    """
+    Fail any test that would open the developer's real consent database.
+
+    :func:`keystress.app.create_app` builds a :class:`Store` at ``settings.store_path``
+    when none is injected, and that default resolves inside the repository. A test that
+    forgets to inject one would quietly write consent rows into the working tree — the
+    precise kind of unintended persistence F2 exists to prevent, and the kind that is
+    invisible until someone commits it. Making the omission a loud failure is cheaper
+    than noticing the stray file later.
+    """
+    real_data_dir = (PROJECT_ROOT / "data").resolve()
+    real_store = keystress.app.Store
+
+    def guarded(path, *args: Any, **kwargs: Any) -> Store:
+        if Path(path).resolve().is_relative_to(real_data_dir):
+            raise AssertionError(
+                f"test opened the real consent database at {path!s}. "
+                "Pass the `store` fixture to create_app(store=...)."
+            )
+        return real_store(path, *args, **kwargs)
+
+    monkeypatch.setattr(keystress.app, "Store", guarded)
 
 
 @pytest.fixture(scope="session")
@@ -71,10 +101,22 @@ def registry(model_bundle: ModelBundle) -> ModelRegistry:
 
 
 @pytest.fixture
-def app(registry: ModelRegistry):
-    """A Flask app wired to the fixture model, never touching disk."""
-    application = create_app(registry=registry, load_model=False)
-    application.config.update(TESTING=True)
+def store(tmp_path) -> Store:
+    """A store backed by a temp database, so tests never touch the real one."""
+    return Store(tmp_path / "test.db")
+
+
+@pytest.fixture
+def app(registry: ModelRegistry, store: Store):
+    """A Flask app wired to the fixture model and a temp store, never touching disk."""
+    application = create_app(registry=registry, store=store, load_model=False)
+    # Rate limiting shares an in-process counter, so leaving it on would couple otherwise
+    # independent tests through a global. Consent enforcement is likewise off here so the
+    # many prediction tests need not each mint a token; both are exercised deliberately in
+    # their own modules (test_security.py, test_consent_api.py).
+    application.config.update(
+        TESTING=True, RATELIMIT_ENABLED=False, KEYSTRESS_REQUIRE_CONSENT=False
+    )
     return application
 
 
@@ -85,10 +127,14 @@ def client(app):
 
 
 @pytest.fixture
-def empty_app():
+def empty_app(tmp_path):
     """An app with no model loaded, for testing graceful degradation."""
-    application = create_app(registry=ModelRegistry(), load_model=False)
-    application.config.update(TESTING=True)
+    application = create_app(
+        registry=ModelRegistry(), store=Store(tmp_path / "empty.db"), load_model=False
+    )
+    application.config.update(
+        TESTING=True, RATELIMIT_ENABLED=False, KEYSTRESS_REQUIRE_CONSENT=False
+    )
     return application
 
 

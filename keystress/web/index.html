@@ -35,8 +35,68 @@
             tell you whether you are burned out, and nothing here is a medical assessment.</p>
         </section>
 
+        <!--
+            Consent gate (F2, HARD RULE 4). Nothing is analysed until this is agreed to,
+            so the typing card below starts hidden and is revealed only by app.js once a
+            consent record exists. The server enforces the same rule independently — this
+            card is the honest explanation, not the security boundary.
+        -->
+        <section class="card consent-card" id="consent-card" aria-labelledby="consent-heading">
+            <div class="card-header">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    <circle cx="12" cy="10" r="2.5"></circle>
+                    <path d="M8.5 16.5a4 4 0 0 1 7 0"></path>
+                </svg>
+                <h2 id="consent-heading">Your consent, before anything runs</h2>
+            </div>
+
+            <p class="consent-summary" id="consent-summary">Loading the consent policy&hellip;</p>
+
+            <div class="privacy-notice disclaimer-notice">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 16v-4"></path>
+                    <path d="M12 8h.01"></path>
+                </svg>
+                <p><strong>Not a medical assessment:</strong>
+                <span id="consent-disclaimer"></span></p>
+            </div>
+
+            <label class="consent-option">
+                <input type="checkbox" id="consent-analysis" onchange="updateConsentButton()">
+                <span><strong>Required.</strong> I agree to have this session&rsquo;s typing
+                <em>timing</em> analysed. My typed text is never captured.</span>
+            </label>
+
+            <label class="consent-option">
+                <input type="checkbox" id="consent-donate" onchange="updateConsentButton()">
+                <span><strong>Optional.</strong> Also store this session&rsquo;s timing features
+                for research. Leave this unticked and nothing is stored at all. You can view or
+                delete anything stored at any time.</span>
+            </label>
+
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary" id="consent-btn" onclick="grantConsent()" disabled>
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <path d="M20 6 9 17l-5-5"></path>
+                    </svg>
+                    Agree and continue
+                </button>
+            </div>
+
+            <p class="consent-version">Consent policy version
+            <span id="consent-version">&hellip;</span></p>
+        </section>
+
         <!-- Typing Test Card -->
-        <section class="card" id="test-card" aria-labelledby="test-heading">
+        <section class="card" id="test-card" aria-labelledby="test-heading" style="display: none;">
             <div class="card-header">
                 <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -164,6 +224,9 @@
 
             <div class="source-note" id="source-note"></div>
 
+            <!-- Says plainly whether this session was stored, so donation is never silent. -->
+            <div class="donation-note" id="donation-note"></div>
+
             <div class="btn-group">
                 <button type="button" class="btn btn-primary" onclick="newTest()">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -186,6 +249,57 @@
                 </svg>
                 <p><strong>Disclaimer:</strong> <span id="disclaimer-text"></span></p>
             </div>
+        </section>
+
+        <!--
+            Transparency and deletion (F2). Hidden until consent exists, because there is
+            nothing to show or delete before then.
+        -->
+        <section class="card data-card" id="data-card" aria-labelledby="data-heading" style="display: none;">
+            <div class="card-header">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true" focusable="false">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                    <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"></path>
+                    <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"></path>
+                </svg>
+                <h2 id="data-heading">Your data</h2>
+            </div>
+
+            <p id="data-status"></p>
+
+            <label class="consent-option">
+                <input type="checkbox" id="donate-toggle" onchange="changeDonateConsent()">
+                <span>Store my sessions&rsquo; timing features for research (you can turn this
+                off at any time; turning it off stops new storage and does not delete what is
+                already there).</span>
+            </label>
+
+            <div class="btn-group">
+                <button type="button" class="btn btn-secondary" onclick="viewMyData()">
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    Show everything stored about me
+                </button>
+                <button type="button" class="btn btn-danger" id="delete-btn" onclick="deleteMyData()">
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <path d="M3 6h18"></path>
+                        <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"></path>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                        <path d="M10 11v6M14 11v6"></path>
+                    </svg>
+                    Delete everything, permanently
+                </button>
+            </div>
+
+            <pre class="data-output" id="data-output"></pre>
         </section>
 
         <!-- Screen-reader announcements. JS drops concise summaries of state

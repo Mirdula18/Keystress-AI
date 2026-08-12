@@ -99,7 +99,7 @@ class TestPredictEndpoint:
         events = make_events(count=5000, interval=0.15)
         assert client.post("/api/predict", json={"keystroke_events": events}).status_code == 200
 
-    def test_feature_set_mismatch_returns_500_without_a_stack_trace(self) -> None:
+    def test_feature_set_mismatch_returns_500_without_a_stack_trace(self, store) -> None:
         """
         A model that cannot score the current feature set must fail clearly, not leak.
 
@@ -118,8 +118,8 @@ class TestPredictEndpoint:
             scaler=_BrokenScaler(),
             metadata={"model_version": "broken", "data_source": "synthetic", "feature_set": "v1"},
         ))
-        app = create_app(registry=registry, load_model=False)
-        app.config.update(TESTING=True)
+        app = create_app(registry=registry, store=store, load_model=False)
+        app.config.update(TESTING=True, KEYSTRESS_REQUIRE_CONSENT=False)
 
         response = app.test_client().post(
             "/api/predict", json={"keystroke_events": make_events()}
@@ -133,25 +133,30 @@ class TestPredictEndpoint:
 class TestAppFactory:
     """The factory that replaced import-time global setup."""
 
-    def test_creates_independent_apps(self, registry) -> None:
-        first = create_app(registry=registry, load_model=False)
-        second = create_app(registry=ModelRegistry(), load_model=False)
+    def test_creates_independent_apps(self, registry, store) -> None:
+        first = create_app(registry=registry, store=store, load_model=False)
+        second = create_app(registry=ModelRegistry(), store=store, load_model=False)
         assert first is not second
         assert first.extensions["keystress_registry"] is not \
             second.extensions["keystress_registry"]
 
-    def test_registry_is_injectable(self, registry) -> None:
+    def test_registry_is_injectable(self, registry, store) -> None:
         """The property that makes the API testable without touching disk."""
-        app = create_app(registry=registry, load_model=False)
+        app = create_app(registry=registry, store=store, load_model=False)
         assert app.extensions["keystress_registry"] is registry
 
-    def test_load_model_false_leaves_registry_empty(self) -> None:
-        app = create_app(registry=ModelRegistry(), load_model=False)
+    def test_store_is_injectable(self, registry, store) -> None:
+        """The same property for the consent store: no test touches the real database."""
+        app = create_app(registry=registry, store=store, load_model=False)
+        assert app.extensions["keystress_store"] is store
+
+    def test_load_model_false_leaves_registry_empty(self, store) -> None:
+        app = create_app(registry=ModelRegistry(), store=store, load_model=False)
         assert not app.extensions["keystress_registry"].is_loaded
 
-    def test_settings_are_attached(self, registry) -> None:
+    def test_settings_are_attached(self, registry, store) -> None:
         settings = Settings(port=1234)
-        app = create_app(settings=settings, registry=registry, load_model=False)
+        app = create_app(settings=settings, registry=registry, store=store, load_model=False)
         assert app.config["KEYSTRESS_SETTINGS"].port == 1234
 
     def test_routes_are_registered(self, app) -> None:
@@ -174,6 +179,7 @@ class TestAppFactory:
             model_path=tmp_path / "model.pkl",
             scaler_path=tmp_path / "scaler.pkl",
             metadata_path=tmp_path / "meta.json",
+            store_path=tmp_path / "store.db",
         )
         app = create_app(settings=settings, registry=ModelRegistry(), load_model=True)
 

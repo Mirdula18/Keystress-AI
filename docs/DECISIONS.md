@@ -433,3 +433,139 @@ source", the guards deserve the same scepticism as the code.
 **Consequences.** The privacy job mutates a tracked file during the run. It is confined to a
 throwaway CI checkout, restored immediately, and the restoration is verified — but anyone reading the
 workflow should understand it is deliberate. The suite-size floor must be raised as tests are added.
+
+---
+
+## D-019 — F4 becomes a crowdsourced, consent-gated donation site, not a lab study
+
+**Phase 1 · `feat/F3-privacy-hardening`**
+
+**Context.** `FEATURES.md` F4 describes a real-data collection harness and imagines a formal study
+protocol. The project owner's intent is broader and simpler: an open-source website anyone can open,
+do the typing exercise, and contribute to research on typing-dynamics vs. burnout.
+
+**Decision.** Deliver F4 as a **public, consent-gated data-donation site**. A visitor consents, does
+the typing test (metadata only), **and** completes a validated burnout questionnaire (D-020); the
+paired, anonymised record is the labelled real dataset that finally breaks the synthetic
+circularity. On the result page the visitor sees **their questionnaire score plus their own typing
+metrics** — never a typing-model "burnout verdict", because the model is still synthetic-trained and
+unvalidated (HARD RULE 2/3, `CLAUDE.md` §1). The typing indicator earns a place on the page only
+after F5 validation on real data. The harness is built self-hostable first; public hosting follows
+once consent, deletion, and data-handling are solid.
+
+**Rationale.** Crowdsourcing is a legitimate, faster path to a labelled dataset than a formal study,
+and the questionnaire gives each visitor genuine value without the project having to overstate the
+typing model. Showing an unvalidated typing verdict would violate the honesty rules the whole
+rebuild exists to enforce.
+
+**Consequences.** The project shifts from strictly local-first (HARD RULE 5) toward hosted central
+collection: a database of people's data, real deletion/withdrawal, and privacy/legal obligations
+(consent, retention, likely research-ethics review). F3 (this branch) hardens the serving path in
+preparation. F2 gains a real storage and deletion layer; F5 is the gate before any typing indicator
+is shown.
+
+---
+
+## D-020 — Copenhagen Burnout Inventory as the labelling instrument
+
+**Phase 1 · `feat/F3-privacy-hardening`**
+
+**Context.** F4/F5 need a recognised burnout instrument to supply the ground-truth label. For a
+public, open-source site, licensing is the deciding constraint: the instrument must be freely usable
+and adaptable by anyone who forks the project.
+
+**Decision.** Use the **Copenhagen Burnout Inventory (CBI)** (Kristensen et al., 2005) — a
+public-domain, free-to-use, validated instrument (19 items; Personal / Work-related / Client-related
+subscales; frequency responses scored 0–100 and averaged per subscale). For an academic-burnout
+context the site will use the **Personal Burnout** subscale plus a **studies-adapted Work-related**
+subscale and drop Client-related; the exact wording and scoring will be documented in the F4
+protocol with citation.
+
+**Rationale.** The obvious student instrument, the Maslach Burnout Inventory – Student Survey, is
+**licensed and paid per administration** — incompatible with an open site anyone can run. CBI is
+public domain, cross-culturally validated, and adaptable, so it fits both the science and the
+licence model. Verified against primary/reference sources rather than memory.
+
+**Consequences.** The dataset schema (F4) carries per-subscale CBI scores as the label; the study
+protocol must cite Kristensen et al. and record the exact adaptation used, since a modified
+instrument is no longer the validated original and must be described honestly.
+
+---
+
+## D-021 — F3 hardening: two payload guards, an in-memory limiter, and a deliberately loose CSP
+
+**Phase 1 · `feat/F3-privacy-hardening`**
+
+**Context.** F3 adds input limits, rate limiting, and security headers to a serving path that will
+soon face the public internet rather than only localhost.
+
+**Decision.** Three choices worth recording:
+
+- **Two payload limits, not one.** `MAX_CONTENT_LENGTH` (default 1 MiB) is the outer memory guard —
+  it rejects an oversized body with `413` *before* it is parsed. `MAX_KEYSTROKE_EVENTS` stays as the
+  *semantic* guard for a payload that is small in bytes but absurd in event count. They protect
+  different failure modes, so both remain.
+- **In-memory rate-limit storage.** Correct for the single-process dev server shipped today; a
+  multi-process production deployment (F14) will point the limiter at a shared backend so the limit
+  holds across workers. The shared in-process counter is why the test fixtures disable rate limiting
+  by default — otherwise independent tests would couple through it.
+- **A CSP that still allows `'unsafe-inline'` and two CDNs.** The current page carries inline
+  `onclick` handlers and `style="width:…"` attributes and pulls fonts/icons from a CDN, so a strict
+  `'self'` policy would break it. The policy tightens to `'self'` with no CDN and no `'unsafe-inline'`
+  in F16, which vendors the assets and moves the handlers into `app.js`. The prediction path itself
+  already makes no third-party call, satisfying the F3 acceptance criterion.
+
+**Rationale.** Ship real hardening now without breaking a working page, and be explicit about the
+one directive that is weaker than it should be so it is closed deliberately in F16 rather than
+forgotten.
+
+**Consequences.** F16 must tighten `keystress/security.py` (drop the CDN and `'unsafe-inline'`
+entries) once assets are local. F14 must set a shared `RATELIMIT_STORAGE_URI`.
+
+---
+
+## D-022 — F2 consent: an opaque token, two independent agreements, and withdrawal separate from erasure
+
+**Phase 1 · `feat/F2-consent-flow`**
+
+**Context.** F2 introduces the first persistence of anything about a person, and the gate that must
+precede any analysis at all. Several designs would satisfy the acceptance criteria on paper; these
+are the ones chosen and why.
+
+**Decision.** Four choices worth recording:
+
+- **An anonymous UUID as the only credential, held in `localStorage`.** No accounts, no email, no
+  password. The token carries no personal content, so losing it leaks nothing — it merely makes the
+  stored rows unreachable, which is a tolerable failure mode for data the participant can delete
+  anyway. Accounts would mean collecting identifying information in order to protect
+  non-identifying information, which is backwards for a project whose product is privacy.
+
+- **Consent is two independent agreements, not one.** `analysis` permits processing this session;
+  `donate` permits storing its features. Neither implies the other, and only `analysis` gates
+  `/api/predict`. Bundling them would make "I want to try the tool" indistinguishable from "I want
+  to contribute to your dataset", which is precisely the conflation informed consent exists to
+  prevent. The default for both is unticked, and a test asserts neither ships pre-checked.
+
+- **The policy wording is versioned content, and every record stores the version in force.** A
+  later edit to the wording cannot retroactively reinterpret what someone agreed to; the record
+  says which text it was. Bumping `CONSENT_VERSION` on a meaning-changing edit is a documented
+  obligation in `keystress/core/consent.py`.
+
+- **Withdrawal (`PATCH /api/consent/<id>`) does not delete; deletion (`DELETE /api/data/<id>`)
+  does.** Turning off donation stops new storage and leaves existing rows alone. Silently
+  destroying data as a side effect of a settings change would be its own unpleasant surprise, and
+  a participant who wants erasure has an explicit, clearly labelled control for it. `PATCH`
+  requires both fields to be stated, so "omitted" can never be ambiguous between *unchanged* and
+  *withdrawn*.
+
+**Rationale.** The acceptance criteria ("no prediction without consent … nothing stored without
+opt-in … deletion is real") are the floor, not the design. Each choice above resolves a case where
+a compliant-but-thoughtless implementation would still treat the participant badly.
+
+**Consequences.** The whitelist in `Store.save_donation` is now a load-bearing privacy boundary and
+must be updated deliberately when F8 versions the feature set — adding a feature there is adding a
+field to what is persisted about people. F4 builds its labelled dataset on this store and will need
+the CBI scores (D-020) joined to `participant_id`. F17's trends dashboard depends on donated
+history existing, so it must degrade honestly for the analysis-only participant who has none.
+The consent gate is enforced server-side and defaults on; `KEYSTRESS_REQUIRE_CONSENT=false` exists
+for tests and must never be set in a deployment.

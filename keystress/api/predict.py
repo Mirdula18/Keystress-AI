@@ -17,6 +17,7 @@ from ..core.collect import process_keystroke_data
 from ..core.features import extract_typing_features
 from ..core.inference import get_prediction_details
 from ..core.model import ModelUnavailableError
+from ..extensions import limiter, predict_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +27,10 @@ bp = Blueprint("predict", __name__)
 #: signal for the aggregate features to mean anything.
 MIN_KEYSTROKE_EVENTS = 5
 
-#: Upper bound on accepted events, so an oversized payload is rejected cleanly rather than
-#: consuming memory. Proper rate limiting and payload caps arrive with F3.
+#: Upper bound on accepted events, a semantic guard against a nonsensical session. The
+#: outer memory guard is ``Settings.max_content_length``, which rejects an oversized body
+#: with 413 before it is ever parsed (F3); this cap catches a payload that is small in
+#: bytes but absurd in event count.
 MAX_KEYSTROKE_EVENTS = 100_000
 
 #: CSS class per indicator level. A missing prediction maps to "unknown", never to "low" —
@@ -82,6 +85,7 @@ def validate_payload(payload: Any) -> tuple[Any, str]:
 
 
 @bp.route("/api/predict", methods=["POST"])
+@limiter.limit(predict_rate_limit)
 def api_predict() -> tuple[Any, int]:
     """
     Score a typing session and return a burnout risk indicator.
@@ -96,6 +100,20 @@ def api_predict() -> tuple[Any, int]:
         ``data_source``, ``model_version``, ``disclaimer``, and ``insufficient_data``.
     """
     payload = request.get_json(silent=True)
+
+    # Consent gate (F2, HARD RULE 4): no analysis without a recorded consent. The token is
+    # taken from the X-Consent-Id header, falling back to a body field so a bare fetch
+    # works. Enforcement is config-gated so tests unrelated to consent can opt out.
+    if current_app.config.get("KEYSTRESS_REQUIRE_CONSENT", True):
+        consent_id = request.headers.get("X-Consent-Id")
+        if not consent_id and isinstance(payload, dict):
+            consent_id = payload.get("consent_id")
+        store = current_app.extensions.get("keystress_store")
+        if store is None or not store.has_analysis_consent(consent_id):
+            return _error(
+                "Analysis consent is required. Record consent at POST /api/consent first.",
+                403,
+            )
 
     events, message = validate_payload(payload)
     if events is None:

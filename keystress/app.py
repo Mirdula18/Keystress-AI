@@ -26,10 +26,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from flask import Flask, render_template
+from flask import Flask, Response, jsonify, render_template, request
 
 from .config import Settings, load_settings
 from .core.model import ModelRegistry, ModelUnavailableError
+from .core.storage import Store
+from .extensions import limiter
+from .security import apply_security_headers
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +107,7 @@ def ensure_model(registry: ModelRegistry, settings: Settings) -> None:
 
 def create_app(settings: Settings | None = None,
                registry: ModelRegistry | None = None,
+               store: Store | None = None,
                load_model: bool = True) -> Flask:
     """
     Build the Flask application.
@@ -112,6 +116,8 @@ def create_app(settings: Settings | None = None,
         settings: Configuration; read from the environment when omitted.
         registry: Model registry to use. Injectable so tests can supply a fixture model
             without touching disk — the thing the inherited module globals made impossible.
+        store: Consent/donation store (F2). Injectable so tests can point at a temporary
+            database instead of the real one.
         load_model: Whether to load or train a model at startup.
 
     Returns:
@@ -119,6 +125,7 @@ def create_app(settings: Settings | None = None,
     """
     settings = settings if settings is not None else load_settings()
     registry = registry if registry is not None else ModelRegistry()
+    store = store if store is not None else Store(settings.store_path)
 
     app = Flask(
         __name__,
@@ -128,17 +135,44 @@ def create_app(settings: Settings | None = None,
     )
     app.config["KEYSTRESS_SETTINGS"] = settings
     app.extensions["keystress_registry"] = registry
+    app.extensions["keystress_store"] = store
+    app.config["KEYSTRESS_REQUIRE_CONSENT"] = settings.require_consent
 
+    # F3 privacy hardening. The body cap rejects an oversized payload with 413 before it
+    # is parsed; the limiter throttles abuse of the model endpoint. Both read from config
+    # so they can be tuned or, for tests, switched off without code changes.
+    app.config["MAX_CONTENT_LENGTH"] = settings.max_content_length
+    app.config["KEYSTRESS_RATE_LIMIT"] = settings.rate_limit
+    app.config["RATELIMIT_ENABLED"] = settings.rate_limit_enabled
+    limiter.init_app(app)
+
+    from .api.consent import bp as consent_bp
     from .api.health import bp as health_bp
     from .api.predict import bp as predict_bp
 
     app.register_blueprint(predict_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(consent_bp)
 
     @app.route("/")
     def index() -> str:
         """Serve the single-page application from ``web/index.html``."""
         return render_template("index.html")
+
+    @app.after_request
+    def _security_headers(response: Response) -> Response:
+        """Harden every response (F3)."""
+        return apply_security_headers(response, is_secure=request.is_secure)
+
+    @app.errorhandler(413)
+    def _payload_too_large(_exc: Exception) -> tuple[Response, int]:
+        """Return the oversized-body rejection as JSON, matching the API error shape."""
+        return jsonify({"error": "Request body too large."}), 413
+
+    @app.errorhandler(429)
+    def _rate_limited(_exc: Exception) -> tuple[Response, int]:
+        """Return the rate-limit rejection as JSON. Flask-Limiter sets ``Retry-After``."""
+        return jsonify({"error": "Too many requests; please slow down."}), 429
 
     if load_model and not registry.is_loaded:
         ensure_model(registry, settings)

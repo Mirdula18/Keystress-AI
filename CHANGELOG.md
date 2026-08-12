@@ -7,7 +7,69 @@ Entries reference the feature IDs in [`docs/FEATURES.md`](docs/FEATURES.md).
 
 ---
 
-## [Unreleased] — Phase 0: honesty and buildability
+## [Unreleased] — Phase 1: ethical core + validity spine
+
+### F2 — Consent, disclaimer & deletion flow
+
+The first thing the project stores about a person, and the gate that must exist before it does.
+Nothing is analysed without a recorded consent, nothing is stored without a second, separate
+opt-in, and everything stored can be viewed and permanently deleted by the person it belongs to
+(HARD RULE 4).
+
+**Added**
+- `keystress/core/consent.py` — the consent wording as versioned content (`CONSENT_VERSION`,
+  `CONSENT_SUMMARY`). Every consent record stores the version in force when it was given, so a
+  later policy change cannot silently reinterpret what someone agreed to.
+- `keystress/core/storage.py` — SQLite store (stdlib, no new dependency) for consent records and
+  opt-in donations. A donation is filtered to exactly the five `FEATURES_V1` values and coerced to
+  `float` at the boundary, so no content-bearing field can reach disk even if a caller passes one.
+  Deletion cascades: rows are removed, not flagged.
+- `keystress/api/consent.py` — `GET /api/consent/policy`, `POST /api/consent`,
+  `PATCH /api/consent/<id>` (change or withdraw), `POST /api/donate`, `GET /api/data/<id>`,
+  `DELETE /api/data/<id>`. The anonymous `participant_id` is the only credential.
+- **Consent gate on `/api/predict`**: without a valid token the endpoint returns `403` and no
+  analysis runs. Config-gated by `KEYSTRESS_REQUIRE_CONSENT` (on by default).
+- **UI gate** (`web/index.html`, `web/static/app.js`): the typing card ships hidden and is revealed
+  only after consent is given against the policy text fetched from the API. Neither checkbox is
+  pre-ticked. A "Your data" panel shows the stored record verbatim as JSON, toggles the donation
+  opt-in, and deletes everything. The results card states plainly whether the session was stored.
+- Config surface: `KEYSTRESS_STORE_PATH`, `KEYSTRESS_REQUIRE_CONSENT`.
+- `tests/test_storage.py`, `tests/test_consent_api.py` — the store, the endpoints, the gate, the
+  UI markup, and withdrawal. `tests/test_privacy.py` gains a section asserting that a *stored*
+  donation is content-free, including a scan of the raw database bytes.
+- Test-isolation guard: an autouse fixture fails any test that would open the real consent
+  database, so consent rows can never be written into the working tree by a test run.
+
+**Decisions.** D-022 (F2 design: token model, two-part consent, withdrawal vs deletion).
+
+### F3 — Privacy hardening & local-first defaults
+
+Defence-in-depth for the serving path, ahead of the project moving from a localhost tool toward a
+consent-gated, publicly hostable data-donation site (see D-019).
+
+**Added**
+- Request-body cap (`MAX_CONTENT_LENGTH`, default 1 MiB): an oversized payload is rejected with
+  `413` before it is parsed, so it cannot exhaust memory. Complements the semantic event-count cap
+  (D-021).
+- Per-client rate limiting on `/api/predict` via Flask-Limiter (default `60/minute`), returning
+  `429` with a `Retry-After` header. Only the model endpoint is throttled; health and static assets
+  are not.
+- Security headers on every response — `Content-Security-Policy`, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Cross-Origin-Opener-Policy`, `Permissions-Policy`; HSTS is
+  added only on a secure origin (`keystress/security.py`).
+- Config surface: `KEYSTRESS_MAX_CONTENT_LENGTH`, `KEYSTRESS_RATE_LIMIT`,
+  `KEYSTRESS_RATE_LIMIT_ENABLED`.
+- Runtime dependency `flask-limiter` (pinned with its transitive set in `requirements-lock.txt`).
+- `tests/test_security.py` — asserts the headers, the 413 cap, and the 429 limit; the shared test
+  fixtures disable rate limiting so they stay hermetic (D-021).
+
+**Decisions.** D-019 (F4 delivered as a crowdsourced, consent-gated donation site with honest
+framing), D-020 (Copenhagen Burnout Inventory as the labelling instrument), D-021 (F3 technical
+choices).
+
+---
+
+## Phase 0 — honesty and buildability
 
 ### Added
 - `docs/AUDIT.md` — Phase 0 baseline audit of the inherited codebase: layout mismatches, the
