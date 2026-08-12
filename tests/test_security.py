@@ -8,14 +8,21 @@ counter; here we build our own apps that turn each guard on and prove it fires.
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+import pytest
 
 from keystress.app import create_app
 from keystress.config import Settings
 from keystress.core.model import ModelRegistry
 from keystress.core.storage import Store
 from keystress.extensions import limiter
-from keystress.security import CONTENT_SECURITY_POLICY
+from keystress.security import (
+    CONTENT_SECURITY_POLICY,
+    CSP_DIRECTIVES,
+    STRICT_DIRECTIVES,
+)
 from tests.conftest import make_events
 
 
@@ -56,6 +63,48 @@ class TestSecurityHeaders:
         # The core function must need no third-party call: connect-src is 'self' only.
         assert "connect-src 'self'" in CONTENT_SECURITY_POLICY
         assert "frame-ancestors 'none'" in CONTENT_SECURITY_POLICY
+
+
+class TestStrictContentSecurityPolicy:
+    """
+    The policy is strict since F16 (D-023), and must stay that way.
+
+    `'unsafe-inline'` in `script-src` re-permits exactly the injected inline script a CSP
+    exists to block, so a regression here would quietly undo the header rather than break
+    anything visible. These tests are the alarm.
+    """
+
+    @pytest.mark.parametrize("directive", sorted(STRICT_DIRECTIVES))
+    def test_no_unsafe_source_in_a_strict_directive(self, directive: str) -> None:
+        value = CSP_DIRECTIVES[directive]
+        assert "unsafe-inline" not in value, f"{directive} allows inline {directive[:-4]}"
+        assert "unsafe-eval" not in value, f"{directive} allows eval"
+
+    def test_no_directive_allows_a_remote_host(self) -> None:
+        """
+        No directive names an external origin.
+
+        The two CDNs that used to appear here were removed by F16; a re-added font or
+        icon host would break offline use and leak the visitor's IP to a third party on
+        page load, before they have consented to anything.
+        """
+        for directive, value in CSP_DIRECTIVES.items():
+            assert "//" not in value, f"{directive} allows a remote host: {value}"
+
+    def test_every_fetch_directive_is_self_or_none(self) -> None:
+        allowed_sources = {"'self'", "'none'", "data:"}
+        for directive, value in CSP_DIRECTIVES.items():
+            unexpected = set(value.split()) - allowed_sources
+            assert not unexpected, f"{directive} allows {sorted(unexpected)}"
+
+    def test_the_page_actually_complies_with_its_own_policy(self, client) -> None:
+        """
+        A strict policy the page violates would be worse than a loose one: the header
+        would look right in an audit while the app silently lost its buttons.
+        """
+        body = client.get("/").get_data(as_text=True)
+        assert 'style="' not in body
+        assert not re.search(r"\son[a-z]+=\"", body)
 
 
 class TestPayloadCap:

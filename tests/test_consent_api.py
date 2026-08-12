@@ -262,10 +262,17 @@ class TestConsentUI:
         assert function_name in page_bundle(consent_client), f"missing JS: {function_name}"
 
     def test_typing_card_starts_hidden(self, consent_client) -> None:
-        """The tool is not usable until the gate is passed — the card ships hidden."""
+        """
+        The tool is not usable until the gate is passed — the card ships hidden.
+
+        Hiding moved from a `style="display: none"` attribute to the `is-hidden` class
+        when F16 made the CSP strict, so this looks for the class. The claim is the same
+        one: the typing card is not visible until app.js reveals it.
+        """
         body = consent_client.get("/").get_data(as_text=True)
         marker = body.index('id="test-card"')
-        assert "display: none" in body[marker:marker + 120], (
+        opening_tag = body[body.rindex("<section", 0, marker):marker]
+        assert "is-hidden" in opening_tag, (
             "the typing card must start hidden so consent precedes use"
         )
 

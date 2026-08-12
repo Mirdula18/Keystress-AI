@@ -68,20 +68,20 @@
             </div>
 
             <label class="consent-option">
-                <input type="checkbox" id="consent-analysis" onchange="updateConsentButton()">
+                <input type="checkbox" id="consent-analysis">
                 <span><strong>Required.</strong> I agree to have this session&rsquo;s typing
                 <em>timing</em> analysed. My typed text is never captured.</span>
             </label>
 
             <label class="consent-option">
-                <input type="checkbox" id="consent-donate" onchange="updateConsentButton()">
+                <input type="checkbox" id="consent-donate">
                 <span><strong>Optional.</strong> Also store this session&rsquo;s timing features
                 for research. Leave this unticked and nothing is stored at all. You can view or
                 delete anything stored at any time.</span>
             </label>
 
             <div class="btn-group">
-                <button type="button" class="btn btn-primary" id="consent-btn" onclick="grantConsent()" disabled>
+                <button type="button" class="btn btn-primary" id="consent-btn" disabled>
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -96,7 +96,7 @@
         </section>
 
         <!-- Typing Test Card -->
-        <section class="card" id="test-card" aria-labelledby="test-heading" style="display: none;">
+        <section class="card is-hidden" id="test-card" aria-labelledby="test-heading">
             <div class="card-header">
                 <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -134,7 +134,7 @@
             </div>
 
             <div class="btn-group">
-                <button type="button" class="btn btn-secondary" onclick="resetTest()">
+                <button type="button" class="btn btn-secondary" id="reset-btn">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -143,7 +143,7 @@
                     </svg>
                     Reset
                 </button>
-                <button type="button" class="btn btn-primary" id="analyze-btn" onclick="analyzeTyping()" disabled>
+                <button type="button" class="btn btn-primary" id="analyze-btn" disabled>
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -169,14 +169,18 @@
         </div>
 
         <!-- Loading State -->
-        <section class="card loader" id="loader-card" aria-hidden="true">
+        <!-- The card is `display: none` until an analysis starts, which already removes it
+             from the accessibility tree. It must NOT carry aria-hidden as well: that would
+             silence the role="status" line inside it, so the one element here whose whole
+             job is to be announced would never be. -->
+        <section class="card loader" id="loader-card" aria-label="Analysis progress">
             <div class="spinner" aria-hidden="true"></div>
             <p id="loader-message" role="status">Analyzing your typing patterns...</p>
         </section>
 
         <!-- Results Card -->
-        <section class="card results" id="results-card">
-            <h2 class="sr-only">Session results</h2>
+        <section class="card results" id="results-card" aria-labelledby="results-heading">
+            <h2 class="sr-only" id="results-heading">Session results</h2>
             <div class="result-header">
                 <div class="result-icon" id="result-icon">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -199,7 +203,7 @@
                         <span id="prob-low">0%</span>
                     </div>
                     <div class="bar">
-                        <div class="fill" id="bar-low" style="width: 0%"></div>
+                        <div class="fill" id="bar-low"></div>
                     </div>
                 </div>
                 <div class="probability-bar medium">
@@ -208,7 +212,7 @@
                         <span id="prob-medium">0%</span>
                     </div>
                     <div class="bar">
-                        <div class="fill" id="bar-medium" style="width: 0%"></div>
+                        <div class="fill" id="bar-medium"></div>
                     </div>
                 </div>
                 <div class="probability-bar high">
@@ -217,7 +221,7 @@
                         <span id="prob-high">0%</span>
                     </div>
                     <div class="bar">
-                        <div class="fill" id="bar-high" style="width: 0%"></div>
+                        <div class="fill" id="bar-high"></div>
                     </div>
                 </div>
             </div>
@@ -228,7 +232,7 @@
             <div class="donation-note" id="donation-note"></div>
 
             <div class="btn-group">
-                <button type="button" class="btn btn-primary" onclick="newTest()">
+                <button type="button" class="btn btn-primary" id="new-test-btn">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -255,7 +259,7 @@
             Transparency and deletion (F2). Hidden until consent exists, because there is
             nothing to show or delete before then.
         -->
-        <section class="card data-card" id="data-card" aria-labelledby="data-heading" style="display: none;">
+        <section class="card data-card is-hidden" id="data-card" aria-labelledby="data-heading">
             <div class="card-header">
                 <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -270,14 +274,14 @@
             <p id="data-status"></p>
 
             <label class="consent-option">
-                <input type="checkbox" id="donate-toggle" onchange="changeDonateConsent()">
+                <input type="checkbox" id="donate-toggle">
                 <span>Store my sessions&rsquo; timing features for research (you can turn this
                 off at any time; turning it off stops new storage and does not delete what is
                 already there).</span>
             </label>
 
             <div class="btn-group">
-                <button type="button" class="btn btn-secondary" onclick="viewMyData()">
+                <button type="button" class="btn btn-secondary" id="view-data-btn">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">
@@ -286,7 +290,7 @@
                     </svg>
                     Show everything stored about me
                 </button>
-                <button type="button" class="btn btn-danger" id="delete-btn" onclick="deleteMyData()">
+                <button type="button" class="btn btn-danger" id="delete-btn">
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         aria-hidden="true" focusable="false">

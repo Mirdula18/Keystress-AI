@@ -569,3 +569,43 @@ the CBI scores (D-020) joined to `participant_id`. F17's trends dashboard depend
 history existing, so it must degrade honestly for the analysis-only participant who has none.
 The consent gate is enforced server-side and defaults on; `KEYSTRESS_REQUIRE_CONSENT=false` exists
 for tests and must never be set in a deployment.
+
+---
+
+## D-023 — The CSP goes strict, and the frontend accepts the constraint that comes with it
+
+**Phase 3 · `feat/F16-offline-and-strict-csp`**
+
+**Context.** D-021 shipped a Content-Security-Policy that allowed `'unsafe-inline'` for both script
+and style and named two CDN hosts, and said plainly that F16 would close it. Meanwhile the web
+branch removed the Google Fonts and Font Awesome dependencies, so by the time the branches merged
+the policy permitted three things the page no longer used and one — inline script — that it still
+did. A policy that over-permits is not neutral: `script-src 'unsafe-inline'` re-authorises exactly
+the injected inline script the header exists to block, so the header was mostly decoration.
+
+**Decision.** Remove the four causes and make every directive `'self'` or `'none'`:
+
+- **Inline handlers become a binding table in `app.js`.** Nine `onclick`/`onchange` attributes are
+  gone; `CONTROL_BINDINGS` maps element id → event → function, so adding a control is adding a row.
+  A missing element is logged, not thrown, so one bad id cannot unbind the other eight — and
+  `tests/test_offline_assets.py` catches the bad id instead.
+- **Inline styles become classes.** `style="display: none"` on the gated cards becomes `.is-hidden`,
+  toggled through `showCard`/`hideCard`; `style="width: 0%"` on the probability bars moves into the
+  `.fill` rule. The widths written during a result are CSSOM assignments, which CSP does not
+  restrict, so the animation is unaffected.
+- **`img-src` keeps `data:`.** The favicon is an inline SVG the page carries rather than fetches.
+  This is the one non-`'self'` source left, and it enables no execution.
+- **`CSP_DIRECTIVES` becomes public and `STRICT_DIRECTIVES` names the two that must never be
+  weakened.** The policy is asserted directive by directive rather than substring-matched.
+
+**Rationale.** The alternative — keeping `'unsafe-inline'` because the page happens to need it — is
+how a security header becomes a checkbox that passes an audit and stops nothing. The work to remove
+it is small and bounded, and it was already owed: D-021 recorded the debt explicitly.
+
+**Consequences.** A real, permanent constraint on the frontend: no inline handler, no inline
+`<style>`, no `style="…"` attribute may be added to `web/index.html` again. Anything that must run
+belongs in `app.js`; anything that must look different belongs in a class. The failure mode is
+silent — a blocked handler is a button that does nothing, with no visible error — so it is enforced
+by test rather than by review. F14 must keep the policy intact when it introduces a production
+server, and any future embedded chart or third-party widget is now a decision to re-open this one,
+not a detail.

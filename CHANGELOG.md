@@ -42,6 +42,58 @@ opt-in, and everything stored can be viewed and permanently deleted by the perso
 
 **Decisions.** D-022 (F2 design: token model, two-part consent, withdrawal vs deletion).
 
+### F16 — Self-hosted assets, offline capability & a strict CSP
+
+The page now loads nothing from anywhere but this origin, and the Content-Security-Policy says so
+instead of merely claiming to.
+
+**Changed**
+- **Strict Content-Security-Policy.** Every directive is `'self'` or `'none'` — no CDN hosts, no
+  `'unsafe-inline'` in `script-src` or `style-src`. The only non-`'self'` source left is `data:` in
+  `img-src`, for the inline SVG favicon the page carries rather than fetches. This closes the
+  compromise D-021 recorded when it shipped the loose policy.
+- **No inline behaviour.** The nine `onclick`/`onchange` attributes are replaced by a
+  `CONTROL_BINDINGS` table in `app.js`; a missing element id is logged rather than thrown, so one
+  typo cannot unbind every other control.
+- **No inline styling.** `style="display: none"` on the gated cards becomes an `.is-hidden` class
+  toggled through `showCard`/`hideCard`; the probability bars take their zero width from the
+  stylesheet. Scripted width changes go through the CSSOM, which CSP does not restrict.
+- `keystress/security.py` exposes `CSP_DIRECTIVES` and `STRICT_DIRECTIVES`, so the policy is
+  asserted directive by directive rather than string-matched.
+
+**Added**
+- `tests/test_offline_assets.py` — no subresource is fetched from another origin (the footer's
+  GitHub link is navigation, not a fetch, and stays); no inline handler, `<script>` block, or
+  `style` attribute may reappear; every linked local asset is actually served; every id in the
+  binding table exists in the markup.
+- `tests/test_security.py` gains `TestStrictContentSecurityPolicy`: the policy forbids inline and
+  remote sources, **and** the served page complies with it. A strict header over a page that needs
+  inline script would pass an audit while silently losing its buttons.
+
+**Decisions.** D-023 (strict CSP, and the permanent frontend constraint it imposes).
+
+### Accessibility — the page keeps the promises its markup makes
+
+**Fixed**
+- The live region (`#announcer`) and the advertised `Ctrl`+`Enter` shortcut existed in markup only.
+  Nothing wrote to the region, so a screen-reader user got silence at every state change — consent
+  accepted, analysis started, result ready, data deleted are each conveyed only by a card appearing
+  — and the shortcut the page told users about did nothing at all.
+- The loader card carried a permanent `aria-hidden="true"`, which silenced the `role="status"` line
+  inside it: the one element whose entire job is to be announced never could be. It is hidden by
+  `display: none` when inactive, which already removes it from the accessibility tree.
+- The results card had no accessible name, so it did not appear in a screen reader's region list.
+
+**Added**
+- `announce()` plus a call at every otherwise-silent transition. The result announcement repeats the
+  same uncalibrated/synthetic qualifier the page displays — HARD RULE 3 governs the spoken channel
+  too — and a test asserts no announcement can read the typing box.
+- `handleShortcut()`: Ctrl+Enter, and Cmd+Enter for a Mac, gated by the same minimum-session-length
+  check as the button so it cannot submit what the button refuses. `event.key` is compared and
+  discarded, exactly as the Backspace check is.
+- `tests/test_accessibility.py` — pairs each affordance in the markup with the code obliged to
+  honour it, so none can quietly go back to being decorative.
+
 ### F3 — Privacy hardening & local-first defaults
 
 Defence-in-depth for the serving path, ahead of the project moving from a localhost tool toward a

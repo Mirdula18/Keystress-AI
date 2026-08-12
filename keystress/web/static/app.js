@@ -25,6 +25,56 @@ typingArea.addEventListener('keydown', recordKeyDown);
 typingArea.addEventListener('input', updateStats);
 
 // -------------------------------------------------------------------------------------
+// Control bindings (F16)
+//
+// Every control used to carry an inline `onclick`/`onchange` attribute, which forced the
+// Content-Security-Policy to allow 'unsafe-inline' scripts — the one directive that
+// meaningfully weakens a CSP, since it re-permits exactly the injected inline script the
+// policy exists to stop. Binding here instead lets `script-src` be plain 'self'.
+//
+// Table-driven so adding a control means adding a row, not remembering to also add a
+// listener; a missing element is reported rather than silently unbound.
+// -------------------------------------------------------------------------------------
+
+const CONTROL_BINDINGS = [
+    ['consent-analysis', 'change', updateConsentButton],
+    ['consent-donate', 'change', updateConsentButton],
+    ['consent-btn', 'click', grantConsent],
+    ['reset-btn', 'click', resetTest],
+    ['analyze-btn', 'click', analyzeTyping],
+    ['new-test-btn', 'click', newTest],
+    ['donate-toggle', 'change', changeDonateConsent],
+    ['view-data-btn', 'click', viewMyData],
+    ['delete-btn', 'click', deleteMyData]
+];
+
+function bindControls() {
+    CONTROL_BINDINGS.forEach(function (binding) {
+        const element = document.getElementById(binding[0]);
+        if (!element) {
+            // A renamed id would otherwise produce a dead button with no clue why.
+            console.error('Keystress: no element #' + binding[0] + ' to bind');
+            return;
+        }
+        element.addEventListener(binding[1], binding[2]);
+    });
+}
+
+bindControls();
+
+// Show/hide by class rather than by writing `style.display`, so the markup carries no
+// `style` attribute and `style-src` can stay strict (F16). Toggling a class also keeps
+// the display mode in the stylesheet, where a card that is not a plain block (the
+// flex-laid-out ones) does not need JS to know that.
+function showCard(elementId) {
+    document.getElementById(elementId).classList.remove('is-hidden');
+}
+
+function hideCard(elementId) {
+    document.getElementById(elementId).classList.add('is-hidden');
+}
+
+// -------------------------------------------------------------------------------------
 // Consent (F2)
 //
 // The participant token is an opaque UUID minted by POST /api/consent. It is the only
@@ -112,25 +162,27 @@ function grantConsent() {
 // Reveal the tool. Called after consent is granted, and on load for a returning
 // participant whose token the server still recognises.
 function showConsentedView() {
-    document.getElementById('consent-card').style.display = 'none';
-    document.getElementById('test-card').style.display = 'block';
-    document.getElementById('data-card').style.display = 'block';
+    hideCard('consent-card');
+    showCard('test-card');
+    showCard('data-card');
     document.getElementById('donate-toggle').checked = donateConsent;
     document.getElementById('data-status').textContent = donateConsent
         ? 'This session’s timing features will be stored for research when you analyse.'
         : 'Nothing is being stored. Analysis runs and the result is discarded.';
+    announce('Consent recorded. The typing session is now available.');
 }
 
 // Show the gate again, e.g. after deletion or a token the server no longer knows.
 function showConsentGate(message) {
-    document.getElementById('consent-card').style.display = 'block';
-    document.getElementById('test-card').style.display = 'none';
-    document.getElementById('data-card').style.display = 'none';
+    showCard('consent-card');
+    hideCard('test-card');
+    hideCard('data-card');
     document.getElementById('results-card').classList.remove('show');
     document.getElementById('consent-analysis').checked = false;
     document.getElementById('consent-donate').checked = false;
     document.getElementById('data-output').textContent = '';
     updateConsentButton();
+    announce(message || 'Consent is required before anything can be analysed.');
     if (message) { alert(message); }
 }
 
@@ -199,6 +251,7 @@ function viewMyData() {
             // summary of it. It is timing features and consent flags - nothing else exists.
             document.getElementById('data-output').textContent =
                 JSON.stringify(result.body, null, 2);
+            announce('Everything stored about you is now shown below.');
         })
         .catch(() => alert('Your data could not be loaded. Please try again.'));
 }
@@ -256,9 +309,41 @@ function donateSession() {
 loadConsentPolicy();
 restoreConsent();
 
+// -------------------------------------------------------------------------------------
+// Accessibility
+//
+// The page carries `#announcer`, a polite live region, and offers Ctrl+Enter as a
+// shortcut. Both were markup-only until now: a screen-reader user got no notification
+// when a card swapped, and the advertised shortcut did nothing.
+//
+// PRIVACY: announcements are fixed strings and server-supplied labels. Nothing derived
+// from the typed text is ever put here — a live region is read aloud, so it is the last
+// place content should be able to reach.
+// -------------------------------------------------------------------------------------
+
+function announce(message) {
+    const region = document.getElementById('announcer');
+    if (!region) { return; }
+    // Clearing first makes a repeat of the same message announce again; assistive
+    // technology ignores a write that does not change the text.
+    region.textContent = '';
+    region.textContent = message;
+}
+
+// Ctrl+Enter (Cmd+Enter on a Mac) analyses without leaving the keyboard. `event.key` is
+// compared and discarded exactly as the Backspace check is — no key identity is stored.
+function handleShortcut(event) {
+    if (!(event.ctrlKey || event.metaKey) || event.key !== 'Enter') { return; }
+    if (analyzeBtn.disabled) { return; }
+    event.preventDefault();
+    analyzeTyping();
+}
+
+typingArea.addEventListener('keydown', handleShortcut);
+
 function recordKeyDown(event) {
     const timestamp = performance.now() / 1000; // Convert to seconds
-    
+
     if (startTime === null) {
         startTime = timestamp;
         updateInterval = setInterval(updateDuration, 100);
@@ -319,8 +404,9 @@ function analyzeTyping() {
     }
 
     // Show loader
-    document.getElementById('test-card').style.display = 'none';
+    hideCard('test-card');
     document.getElementById('loader-card').classList.add('show');
+    announce('Analysing your typing session.');
 
     // Prepare data for API
     const data = {
@@ -366,7 +452,7 @@ function analyzeTyping() {
 // usable rather than stuck on a spinner.
 function returnToTest() {
     document.getElementById('loader-card').classList.remove('show');
-    document.getElementById('test-card').style.display = 'block';
+    showCard('test-card');
 }
 
 // Human-readable qualifier for a data_source value. Every number rendered on this
@@ -423,7 +509,7 @@ function displayResults(result) {
         levelEl.className = 'result-level medium';
         document.getElementById('result-confidence').textContent = '';
         document.getElementById('result-description').textContent = result.description;
-        probabilitySection.style.display = 'none';
+        probabilitySection.classList.add('is-hidden');
         // A session with too little signal is not worth donating, and saying so is
         // clearer than leaving the storage note blank.
         document.getElementById('donation-note').textContent =
@@ -431,10 +517,11 @@ function displayResults(result) {
         sourceNote.textContent =
             'No indicator was produced, so there is no number to report. '
             + 'Model ' + modelVersion + ' (trained ' + qualifier + ').';
+        announce(result.label + '. ' + result.description);
         return;
     }
 
-    probabilitySection.style.display = 'block';
+    probabilitySection.classList.remove('is-hidden');
 
     icon.className = 'result-icon ' + result.level_class;
     icon.innerHTML = RESULT_ICON_SVGS[result.level_class] || RESULT_ICON_UNKNOWN;
@@ -474,12 +561,18 @@ function displayResults(result) {
               + '- not any demonstrated ability to detect real burnout.'
             : '');
 
+    // The announcement carries the same qualifier the page shows, so a screen-reader
+    // user is never told a bare number either.
+    announce('Result: ' + result.label + '. Model confidence '
+        + (result.confidence * 100).toFixed(0) + ' percent, uncalibrated, ' + qualifier + '.');
+
     donateSession();
 }
 
 function newTest() {
     document.getElementById('results-card').classList.remove('show');
-    document.getElementById('test-card').style.display = 'block';
+    showCard('test-card');
     document.getElementById('donation-note').textContent = '';
     resetTest();
+    announce('Ready for a new typing session.');
 }
