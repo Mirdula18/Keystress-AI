@@ -665,3 +665,59 @@ deletion promise is exported files, which live outside the deletion path — a h
 the protocol names explicitly, since no code change can fix it. F5 depends on `labelled_records()`
 carrying `participant_id`; F8 must bump the feature-set version rather than change what the five
 columns mean, because exported files already claim `feature_set = v1`.
+
+---
+
+## D-025 — F5: grouped splits, mandatory baselines, a text report, and a status nobody can set
+
+**Phase 1 · `feat/F5-validation-harness`**
+
+**Context.** F5 is the gate between "we have a model" and "we may say the model works". Its
+acceptance criteria — participant-grouped splits, trivial baselines always shown, and a clear
+"synthetic — not validated" marking — are satisfiable by a module that computes some numbers. The
+decisions below are about making the honest reading the *only* available one.
+
+**Decision.** Five choices worth recording:
+
+- **A missing `participant_id` is a hard failure, not a fallback to a random split.** This is the
+  most dangerous convenience the codebase could contain: a person's typing rhythm is recognisable
+  across their own sessions, so a row-wise split lets the model score well by identifying the
+  person. The resulting figure is real, reproducible, and meaningless — and it looks exactly like a
+  good result. Fewer than four participants is refused for the same reason.
+
+- **Baselines are computed on every run and compared in words.** `beats_all_baselines` is a
+  boolean in the report, and the terminal output prints "The model did NOT beat every trivial
+  baseline. It has demonstrated no useful skill on this data." Two numbers in a table can be read
+  charitably; that sentence cannot. The headline metric is macro-F1, named once as
+  `HEADLINE_METRIC` so the comparison, the report, and the validation verdict cannot drift onto
+  different metrics.
+
+- **Validation status is derived, with three states.** Not two. "Evaluated on real data and found
+  to have no skill" is a genuine result and deserves to be distinguishable from "never tested" —
+  collapsing them would erase the difference between an untested model and a refuted one. The
+  status is a function of the model's training source and a report on disk whose `model_version`
+  matches; there is no field to set. A synthetic run never validates, and a corrupt report counts
+  as absent, because the alternative is claiming validation from a file nobody can parse.
+
+- **A report carries its own warnings, persisted in the JSON.** Small test set, thin participant
+  pool, a class never predicted, calibration off, baselines not beaten. A report is read months
+  after it is produced, by someone without the context that produced it; caveats that live only in
+  the terminal scrollback have already been lost by then.
+
+- **No matplotlib.** `FEATURES.md` suggests plots for the calibration curve. The reliability data
+  is returned as numbers and printed as a table instead: a text table is greppable, diffable,
+  reviewable in a pull request, and readable over SSH, and it keeps the dependency list at six
+  runtime packages (`CLAUDE.md` §4 — keep the stack small). If a plot is ever wanted, the numbers
+  to draw it are already in the report.
+
+**Rationale.** Every one of these is a place where the cheaper implementation would still have
+passed the acceptance criteria while allowing a reader — including a future maintainer in a hurry —
+to walk away with a claim the evidence does not support.
+
+**Consequences.** `/api/health` and `/readyz` now report validation status, so an operator sees
+`not-validated` on a green health check rather than inferring the opposite; F14 must keep that when
+it introduces a production server. F7's calibration work has its measurement already in place and
+should reuse `calibration_metrics` rather than adding a second definition. F6's per-user baselines
+change what a "session" means for grouping, and must revisit `splits.py` rather than assume it
+still applies. Any future claim about performance is expected to cite a report id — which is why
+the report is written per model version, and why model versions are deterministic (D-017).

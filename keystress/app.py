@@ -137,6 +137,10 @@ def create_app(settings: Settings | None = None,
     app.extensions["keystress_registry"] = registry
     app.extensions["keystress_store"] = store
     app.config["KEYSTRESS_REQUIRE_CONSENT"] = settings.require_consent
+    # Where F5 evaluation reports live. Beside the model artifacts, so a service started
+    # from any working directory still finds the reports for the model it loaded.
+    app.config["KEYSTRESS_MODEL_PATH"] = str(settings.model_path)
+    app.config["KEYSTRESS_EVAL_REPORT_DIR"] = str(Path(settings.model_path).parent / "eval")
 
     # F3 privacy hardening. The body cap rejects an oversized payload with 413 before it
     # is parsed; the limiter throttles abuse of the model endpoint. Both read from config

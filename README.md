@@ -57,9 +57,17 @@ leave the keyboard. No character, key code, or content is recorded.
 
 The shipped model is trained on synthetic data whose burnout classes were **defined by hand** in the
 generator. Its ~90% "accuracy" measures how separable those authored classes are — it is **not**
-evidence the system detects real burnout. Establishing real performance requires consented, labeled,
-real-world data (`FEATURES.md` F4) and honest, participant-grouped validation (F5). Until then, all
-results are marked `data_source: synthetic`.
+evidence the system detects real burnout. Until a real dataset exists, all results are marked
+`data_source: synthetic`.
+
+Both halves of the fix are now built, and neither has been *used* yet:
+
+- **F4** — the site can collect consented, labelled real sessions: a typing session paired with a
+  self-reported score from a studies-adapted Copenhagen Burnout Inventory. **No data has been
+  collected.** See `docs/STUDY_PROTOCOL.md` before running a collection.
+- **F5** — the harness that evaluates a model against such data, using participant-grouped splits
+  and always alongside trivial baselines. `/api/health` reports a `validation` block, and today it
+  says `not-validated`, because it is.
 
 If validation shows the signal is weak, that is a legitimate and useful finding. The value here is
 rigorous, privacy-preserving methodology — not a headline number.
@@ -80,6 +88,17 @@ it explicitly:
 python -m keystress.ml.synthetic    # generate the synthetic dataset
 python -m keystress.ml.train        # train and print a source-labelled evaluation report
 ```
+
+Research workflow (F4 → F5), once real sessions have been donated:
+
+```bash
+keystress-export --out data/labelled_sessions.csv          # labelled real dataset + its warnings
+keystress-evaluate --dataset data/labelled_sessions.csv                    --data-source real                      # grouped split, baselines, calibration
+```
+
+`--data-source` has no default on purpose: only a `real` run can move a model out of
+`not-validated`, and inferring that from a filename is how a mislabelled file would silently
+promote one.
 
 Development:
 
@@ -104,6 +123,7 @@ Configuration (all optional, safe defaults):
 | `KEYSTRESS_RATE_LIMIT_ENABLED` | `true` | Master switch for rate limiting (F3). |
 | `KEYSTRESS_STORE_PATH` | `data/keystress.db` | Consent records and opt-in donations (F2). Local-only; never committed. |
 | `KEYSTRESS_REQUIRE_CONSENT` | `true` | Refuse `/api/predict` without a recorded consent (F2). Leave on; `false` exists for tests. |
+| `KEYSTRESS_MODEL_PATH` | `models/burnout_model.pkl` | Model artifact. Evaluation reports are read from `eval/` beside it (F5). |
 
 Docker (after F15): `docker compose up`.
 
@@ -118,7 +138,9 @@ keystress/
 ├── api/            # HTTP layer: predict, health/readyz, consent/donate/delete
 ├── core/           # domain: collect (privacy boundary), features, model loader, inference,
 │                   #         consent policy, consent+donation store
-├── ml/             # offline: synthetic generation, training  (never on the serving path)
+├── research/       # offline: the labelling instrument, its scoring, dataset export (F4)
+├── ml/             # offline: synthetic generation, training, splits, baselines, metrics,
+│                   #         evaluation, validation status  (never on the serving path)
 └── web/            # extracted frontend (F10)
 tools/              # repository checks (metric qualifiers)
 tests/              # unit, API, and privacy tests

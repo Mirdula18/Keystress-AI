@@ -52,12 +52,24 @@ Make it safe to put in front of a person, and start breaking the synthetic circu
       donated sessions, `labelled-v1` export with participant grouping keys, and
       `docs/STUDY_PROTOCOL.md`. No data collected yet — the harness exists, the study has not run.
       See `CHANGELOG.md` F4 and D-024.*
-- [ ] **F5 — Validation harness** (participant-grouped splits, trivial baselines, calibration,
-      eval report per model version).
+- [x] **F5 — Validation harness.** *Participant-grouped splits that refuse to fall back to a
+      random one, trivial baselines on every run with the comparison stated in words, per-class
+      metrics, calibration (reliability table, ECE, Brier), and a report persisted per model
+      version carrying its own warnings. Validation status is derived, three-state, and surfaced
+      on `/api/health` — where it currently reads `not-validated`. See `CHANGELOG.md` F5 and
+      D-025.*
 
 **Exit criteria:** no analysis without consent; disclaimer always shown; a real (even if small)
 labeled dataset can be collected and evaluated with honest, participant-grouped metrics reported
 alongside trivial baselines. *This is the version that can be presented with integrity.*
+
+> **Phase 1 code-complete; the study has not run.** All four features are built and tested: nothing
+> is analysed without consent (F2), the serving path is hardened and offline-capable (F3), a
+> labelled real dataset *can* be collected (F4), and it *can* be evaluated honestly (F5). What does
+> not exist is data — no sessions have been collected, so the model remains `not-validated` and
+> every number the project reports is still measured on synthetic data. Phase 1's exit criteria are
+> met in capability; the scientific claim they enable waits on `docs/STUDY_PROTOCOL.md` being
+> carried out.
 
 ---
 
