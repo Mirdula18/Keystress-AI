@@ -176,8 +176,11 @@ def page_bundle(client) -> str:
     srcs = re.findall(r'<script[^>]+src="([^"]+)"', body)
 
     for url in hrefs + srcs:
-        if url.startswith(("http://", "https://", "//")):
-            continue  # third-party asset; not ours to inline (F16 removes these)
+        # Third-party URLs and data: URIs are not servable same-origin assets: the
+        # former are skipped until F16 removes them, and the latter are inline content
+        # (e.g. the favicon) that a browser renders directly.
+        if url.startswith(("http://", "https://", "//", "data:")):
+            continue
         response = client.get(url)
         assert response.status_code == 200, f"linked asset {url} returned {response.status_code}"
         parts.append(response.get_data(as_text=True))
