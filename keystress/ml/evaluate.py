@@ -388,3 +388,82 @@ def format_report(report: dict[str, Any]) -> str:
         lines.append("=" * 78)
 
     return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """
+    CLI entrypoint: evaluate the current model against a labelled dataset.
+
+    ``--data-source`` is required rather than inferred from the filename. Inferring it
+    would mean a mislabelled file could silently promote a model to "validated", which is
+    the one mistake this harness exists to make impossible.
+
+    Parameters:
+        argv: Argument list; defaults to ``sys.argv[1:]``.
+
+    Returns:
+        int: ``0`` when a report was produced — including one that says the model has no
+        skill, which is a successful evaluation with a negative result. ``1`` only when
+        the evaluation could not be run at all.
+    """
+    import argparse
+
+    from ..config import load_settings
+    from ..core.model import ModelRegistry, ModelUnavailableError
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+    parser = argparse.ArgumentParser(
+        prog="keystress-evaluate",
+        description="Evaluate a model against a labelled dataset, with baselines (F5).",
+    )
+    parser.add_argument("--dataset", type=Path,
+                        default=Path("data") / "labelled_sessions.csv",
+                        help="Labelled dataset from `keystress-export`.")
+    parser.add_argument("--data-source", required=True, choices=("real", "synthetic"),
+                        help="What this dataset is. Only 'real' can confer validation.")
+    parser.add_argument("--test-size", type=float, default=0.3,
+                        help="Proportion of rows held out.")
+    parser.add_argument("--seed", type=int, default=42, help="Seed for split and baselines.")
+    parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR,
+                        help="Where to write the report.")
+    parser.add_argument("--no-save", action="store_true",
+                        help="Print the report without persisting it.")
+    args = parser.parse_args(argv)
+
+    settings = load_settings()
+    registry = ModelRegistry()
+    try:
+        bundle = registry.load(
+            settings.model_path, settings.scaler_path, settings.metadata_path
+        )
+    except ModelUnavailableError as exc:
+        # `load_bundle` already normalises every artifact failure — missing, corrupt,
+        # unpicklable — into this one exception with a message that says what to do.
+        logger.error("Could not load a model to evaluate: %s", exc)
+        return 1
+
+    try:
+        frame = load_labelled_dataset(args.dataset)
+        report = evaluate(
+            bundle, frame,
+            data_source=args.data_source,
+            test_size=args.test_size,
+            seed=args.seed,
+            dataset_path=str(args.dataset),
+        )
+    except (FileNotFoundError, InsufficientDataError, ValueError) as exc:
+        logger.error("Evaluation could not run: %s", exc)
+        return 1
+
+    print(format_report(report))
+
+    if not args.no_save:
+        path = save_report(report, args.report_dir)
+        print(f"\nReport written to {path}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -254,3 +254,102 @@ class TestFormatting:
         text = format_report(evaluate(fitted_bundle, labelled_frame(), data_source="real"))
         for name in ("Low", "Medium", "High"):
             assert name in text
+
+
+class TestCli:
+    """The `keystress-evaluate` entrypoint."""
+
+    def _install_model(self, bundle: ModelBundle, tmp_path, monkeypatch) -> None:
+        """Write the bundle to disk and point the settings at it."""
+        import joblib
+
+        model_path = tmp_path / "model.pkl"
+        scaler_path = tmp_path / "scaler.pkl"
+        metadata_path = tmp_path / "metadata.json"
+
+        joblib.dump(bundle.estimator, model_path)
+        joblib.dump(bundle.scaler, scaler_path)
+        metadata_path.write_text(json.dumps(bundle.metadata), encoding="utf-8")
+
+        monkeypatch.setenv("KEYSTRESS_MODEL_PATH", str(model_path))
+        monkeypatch.setenv("KEYSTRESS_SCALER_PATH", str(scaler_path))
+        monkeypatch.setenv("KEYSTRESS_METADATA_PATH", str(metadata_path))
+
+    def test_data_source_must_be_stated(self, tmp_path) -> None:
+        """
+        Inferring it from the filename would let a mislabelled file silently promote a
+        model to "validated" — the one mistake this harness exists to prevent.
+        """
+        from keystress.ml.evaluate import main
+
+        with pytest.raises(SystemExit):
+            main(["--dataset", str(tmp_path / "x.csv")])
+
+    def test_no_model_on_disk_exits_one_with_advice(self, tmp_path, monkeypatch, caplog) -> None:
+        from keystress.ml.evaluate import main
+
+        monkeypatch.setenv("KEYSTRESS_MODEL_PATH", str(tmp_path / "absent.pkl"))
+        monkeypatch.setenv("KEYSTRESS_SCALER_PATH", str(tmp_path / "absent-scaler.pkl"))
+
+        assert main(["--dataset", str(tmp_path / "d.csv"), "--data-source", "real"]) == 1
+        assert "keystress-train" in caplog.text
+
+    def test_a_missing_dataset_exits_one(self, fitted_bundle, tmp_path, monkeypatch) -> None:
+        from keystress.ml.evaluate import main
+
+        self._install_model(fitted_bundle, tmp_path, monkeypatch)
+        assert main([
+            "--dataset", str(tmp_path / "absent.csv"), "--data-source", "real",
+        ]) == 1
+
+    def test_a_full_run_writes_a_report(self, fitted_bundle, tmp_path, monkeypatch, capsys) -> None:
+        from keystress.ml.evaluate import main
+
+        self._install_model(fitted_bundle, tmp_path, monkeypatch)
+        dataset = tmp_path / "labelled.csv"
+        labelled_frame().to_csv(dataset, index=False)
+        report_dir = tmp_path / "eval"
+
+        exit_code = main([
+            "--dataset", str(dataset), "--data-source", "real",
+            "--report-dir", str(report_dir),
+        ])
+
+        assert exit_code == 0
+        assert "MODEL EVALUATION" in capsys.readouterr().out
+        assert list(report_dir.glob("*.json")), "no report was persisted"
+
+    def test_a_model_with_no_skill_still_exits_zero(
+        self, fitted_bundle, tmp_path, monkeypatch
+    ) -> None:
+        """
+        A negative result is a successful evaluation. Exiting non-zero would make an
+        honest finding look like a broken run, and would eventually get "fixed".
+        """
+        from keystress.ml.evaluate import main
+
+        self._install_model(fitted_bundle, tmp_path, monkeypatch)
+        noise = labelled_frame()
+        rng = np.random.default_rng(13)
+        noise["label"] = rng.integers(0, 3, size=len(noise))
+        dataset = tmp_path / "noise.csv"
+        noise.to_csv(dataset, index=False)
+
+        assert main([
+            "--dataset", str(dataset), "--data-source", "real",
+            "--report-dir", str(tmp_path / "eval"),
+        ]) == 0
+
+    def test_no_save_skips_persistence(self, fitted_bundle, tmp_path, monkeypatch) -> None:
+        from keystress.ml.evaluate import main
+
+        self._install_model(fitted_bundle, tmp_path, monkeypatch)
+        dataset = tmp_path / "labelled.csv"
+        labelled_frame().to_csv(dataset, index=False)
+        report_dir = tmp_path / "eval"
+
+        assert main([
+            "--dataset", str(dataset), "--data-source", "real",
+            "--report-dir", str(report_dir), "--no-save",
+        ]) == 0
+        assert not report_dir.exists()
