@@ -74,7 +74,9 @@ abstention; feature additions justified by real-data lift; fairness/drift report
 
 - [ ] **F14 — Production serving & config** (WSGI, `.env.example`, health/readiness).
 - [ ] **F15 — Docker & one-command dev.**
-- [ ] **F16 — Self-hosted assets & offline capability.**
+- [x] **F16 — Self-hosted assets & offline capability.** *No third-party request from the
+      page; fonts and icons are local (inline SVG), and the CSP is strict — every directive
+      `'self'` or `'none'`, closing the D-021 compromise. See `CHANGELOG.md` F16 and D-023.*
 - [ ] **F17 — Personal insights & trends dashboard** (opt-in, local, reflection-framed).
 - [ ] **F18 — Wellbeing resources & safe messaging** for elevated results.
 - [ ] **F19 — Explainability of a prediction.**
