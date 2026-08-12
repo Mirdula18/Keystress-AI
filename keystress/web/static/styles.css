@@ -47,6 +47,16 @@ body {
     margin-bottom: 2rem;
 }
 
+/* Inline SVG icons share the sizing of the Font Awesome glyphs they replace.
+ * Sizing by em keeps them in step with surrounding text. */
+.icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
+    flex-shrink: 0;
+}
+
 .header h1 {
     font-size: 2.5rem;
     font-weight: 700;
@@ -58,6 +68,10 @@ body {
 }
 
 .header h1 i {
+    color: var(--secondary);
+}
+
+.header h1 .icon {
     color: var(--secondary);
 }
 
