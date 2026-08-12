@@ -125,6 +125,20 @@ class TestNoInlineHandlers:
         """
         assert f'id="{element_id}"' in client.get("/").get_data(as_text=True)
 
+    def test_page_carries_no_inline_style_attribute(self, client) -> None:
+        """
+        Styling lives in the stylesheet, so the CSP can forbid inline style too.
+
+        Scripted width changes (`bar.style.width = …`) go through the CSSOM and are not
+        restricted by CSP; a `style="…"` attribute in the markup is, and would be silently
+        dropped under the strict policy — leaving, for instance, a permanently visible
+        typing card in front of someone who has not consented.
+        """
+        body = client.get("/").get_data(as_text=True)
+        assert not re.search(r'\sstyle\s*=\s*"', body), (
+            "inline style attribute found; use a class instead"
+        )
+
     def test_binding_table_covers_every_control(self, client) -> None:
         """The reverse direction: no control is left without a listener."""
         script = client.get("/static/app.js").get_data(as_text=True)

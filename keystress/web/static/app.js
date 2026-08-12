@@ -62,6 +62,18 @@ function bindControls() {
 
 bindControls();
 
+// Show/hide by class rather than by writing `style.display`, so the markup carries no
+// `style` attribute and `style-src` can stay strict (F16). Toggling a class also keeps
+// the display mode in the stylesheet, where a card that is not a plain block (the
+// flex-laid-out ones) does not need JS to know that.
+function showCard(elementId) {
+    document.getElementById(elementId).classList.remove('is-hidden');
+}
+
+function hideCard(elementId) {
+    document.getElementById(elementId).classList.add('is-hidden');
+}
+
 // -------------------------------------------------------------------------------------
 // Consent (F2)
 //
@@ -150,9 +162,9 @@ function grantConsent() {
 // Reveal the tool. Called after consent is granted, and on load for a returning
 // participant whose token the server still recognises.
 function showConsentedView() {
-    document.getElementById('consent-card').style.display = 'none';
-    document.getElementById('test-card').style.display = 'block';
-    document.getElementById('data-card').style.display = 'block';
+    hideCard('consent-card');
+    showCard('test-card');
+    showCard('data-card');
     document.getElementById('donate-toggle').checked = donateConsent;
     document.getElementById('data-status').textContent = donateConsent
         ? 'This session’s timing features will be stored for research when you analyse.'
@@ -161,9 +173,9 @@ function showConsentedView() {
 
 // Show the gate again, e.g. after deletion or a token the server no longer knows.
 function showConsentGate(message) {
-    document.getElementById('consent-card').style.display = 'block';
-    document.getElementById('test-card').style.display = 'none';
-    document.getElementById('data-card').style.display = 'none';
+    showCard('consent-card');
+    hideCard('test-card');
+    hideCard('data-card');
     document.getElementById('results-card').classList.remove('show');
     document.getElementById('consent-analysis').checked = false;
     document.getElementById('consent-donate').checked = false;
@@ -357,7 +369,7 @@ function analyzeTyping() {
     }
 
     // Show loader
-    document.getElementById('test-card').style.display = 'none';
+    hideCard('test-card');
     document.getElementById('loader-card').classList.add('show');
 
     // Prepare data for API
@@ -404,7 +416,7 @@ function analyzeTyping() {
 // usable rather than stuck on a spinner.
 function returnToTest() {
     document.getElementById('loader-card').classList.remove('show');
-    document.getElementById('test-card').style.display = 'block';
+    showCard('test-card');
 }
 
 // Human-readable qualifier for a data_source value. Every number rendered on this
@@ -461,7 +473,7 @@ function displayResults(result) {
         levelEl.className = 'result-level medium';
         document.getElementById('result-confidence').textContent = '';
         document.getElementById('result-description').textContent = result.description;
-        probabilitySection.style.display = 'none';
+        probabilitySection.classList.add('is-hidden');
         // A session with too little signal is not worth donating, and saying so is
         // clearer than leaving the storage note blank.
         document.getElementById('donation-note').textContent =
@@ -472,7 +484,7 @@ function displayResults(result) {
         return;
     }
 
-    probabilitySection.style.display = 'block';
+    probabilitySection.classList.remove('is-hidden');
 
     icon.className = 'result-icon ' + result.level_class;
     icon.innerHTML = RESULT_ICON_SVGS[result.level_class] || RESULT_ICON_UNKNOWN;
@@ -517,7 +529,7 @@ function displayResults(result) {
 
 function newTest() {
     document.getElementById('results-card').classList.remove('show');
-    document.getElementById('test-card').style.display = 'block';
+    showCard('test-card');
     document.getElementById('donation-note').textContent = '';
     resetTest();
 }

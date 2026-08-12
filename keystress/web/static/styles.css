@@ -371,6 +371,11 @@ body {
 
 .probability-bar .fill {
     height: 100%;
+    /* Starts empty; app.js sets the width from the response. The initial value lives
+     * here rather than in a `style="width: 0%"` attribute so the markup stays free of
+     * inline styles and the CSP can forbid them (F16). Scripted width changes go
+     * through the CSSOM, which CSP does not restrict. */
+    width: 0;
     border-radius: 4px;
     transition: width 0.5s ease;
 }
@@ -595,6 +600,14 @@ body {
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+/* Hidden from everyone, including assistive technology — for a card that is not part
+ * of the flow yet (the typing test before consent) rather than one that is merely
+ * invisible. `!important` because it must beat the layout `display` of whatever it is
+ * applied to; this class exists to win. */
+.is-hidden {
+    display: none !important;
 }
 
 /* Visually hidden but still read by assistive technology. Used for heading
