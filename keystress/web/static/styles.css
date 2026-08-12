@@ -12,27 +12,68 @@
 }
 
 :root {
+    /* Brand palette */
     --primary: #6366f1;
     --primary-dark: #4f46e5;
     --secondary: #22d3ee;
     --success: #22c55e;
     --warning: #f59e0b;
     --danger: #ef4444;
-    --dark: #1e293b;
-    --light: #f8fafc;
-    --gray: #64748b;
+
+    /* Surfaces */
+    --surface: #ffffff;
+    --surface-muted: #f8fafc;
+    --surface-hover: #eef2f7;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+
+    /* Text */
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --text-inverse: #ffffff;
+
+    /* Feedback tints */
+    --success-bg: #dcfce7;
+    --success-border: #86efac;
+    --warning-bg: #fef3c7;
+    --warning-border: #fcd34d;
+    --danger-bg: #fee2e2;
+
+    /* Typography */
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji",
+        "Segoe UI Emoji", "Segoe UI Symbol";
+
+    /* Spacing scale */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+
+    /* Radii */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
+
+    /* Elevation */
+    --shadow-card: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    --shadow-accent: 0 10px 20px rgba(99, 102, 241, 0.3);
+
+    /* Motion */
+    --transition-fast: 0.15s ease;
+    --transition-base: 0.3s ease;
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji",
-        "Segoe UI Emoji", "Segoe UI Symbol";
+    font-family: var(--font-sans);
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 2rem;
+    padding: var(--space-6);
 }
 
 .container {
@@ -44,7 +85,7 @@ body {
 .header {
     text-align: center;
     color: white;
-    margin-bottom: 2rem;
+    margin-bottom: var(--space-6);
 }
 
 /* Inline SVG icons share the sizing of the Font Awesome glyphs they replace.
@@ -82,20 +123,20 @@ body {
 
 /* Card */
 .card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    padding: 2rem;
-    margin-bottom: 1.5rem;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-6);
+    margin-bottom: var(--space-5);
 }
 
 .card-header {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #f1f5f9;
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+    padding-bottom: var(--space-4);
+    border-bottom: 2px solid var(--surface-hover);
 }
 
 .card-header i {
@@ -103,21 +144,26 @@ body {
     color: var(--primary);
 }
 
+.card-header .icon {
+    font-size: 1.5rem;
+    color: var(--primary);
+}
+
 .card-header h2 {
     font-size: 1.25rem;
-    color: var(--dark);
+    color: var(--text);
 }
 
 /* Typing Area */
 .typing-prompt {
     background: linear-gradient(135deg, #f0f4ff 0%, #e8f4f8 100%);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    margin-bottom: var(--space-5);
 }
 
 .typing-prompt p {
-    color: var(--dark);
+    color: var(--text);
     font-size: 1rem;
     line-height: 1.6;
 }
@@ -125,24 +171,24 @@ body {
 .typing-prompt .label {
     display: inline-block;
     background: var(--primary);
-    color: white;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
+    color: var(--text-inverse);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-lg);
     font-size: 0.75rem;
     font-weight: 600;
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
 }
 
 #typing-area {
     width: 100%;
     min-height: 150px;
     padding: 1.25rem;
-    border: 2px solid #e2e8f0;
-    border-radius: 12px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
     font-size: 1rem;
     font-family: inherit;
     resize: none;
-    transition: all 0.3s ease;
+    transition: all var(--transition-base);
 }
 
 #typing-area:focus {
@@ -159,14 +205,14 @@ body {
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 1rem;
-    margin: 1.5rem 0;
+    gap: var(--space-4);
+    margin: var(--space-5) 0;
 }
 
 .stat-item {
-    background: #f8fafc;
-    padding: 1rem;
-    border-radius: 12px;
+    background: var(--surface-muted);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
     text-align: center;
 }
 
@@ -178,7 +224,7 @@ body {
 
 .stat-item .label {
     font-size: 0.75rem;
-    color: var(--gray);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -186,33 +232,33 @@ body {
 /* Buttons */
 .btn-group {
     display: flex;
-    gap: 1rem;
-    margin-top: 1.5rem;
+    gap: var(--space-4);
+    margin-top: var(--space-5);
 }
 
 .btn {
     flex: 1;
-    padding: 1rem 1.5rem;
+    padding: var(--space-4) var(--space-5);
     border: none;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    transition: all 0.3s ease;
+    gap: var(--space-2);
+    transition: all var(--transition-base);
 }
 
 .btn-primary {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    color: white;
+    color: var(--text-inverse);
 }
 
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+    box-shadow: var(--shadow-accent);
 }
 
 .btn-primary:disabled {
@@ -223,12 +269,12 @@ body {
 }
 
 .btn-secondary {
-    background: #f1f5f9;
-    color: var(--dark);
+    background: var(--surface-hover);
+    color: var(--text);
 }
 
 .btn-secondary:hover {
-    background: #e2e8f0;
+    background: var(--border);
 }
 
 /* Results */
@@ -242,7 +288,7 @@ body {
 
 .result-header {
     text-align: center;
-    margin-bottom: 2rem;
+    margin-bottom: var(--space-6);
 }
 
 .result-icon {
@@ -282,43 +328,43 @@ body {
 .result-level.high { color: var(--danger); }
 
 .result-confidence {
-    color: var(--gray);
+    color: var(--text-muted);
     font-size: 0.9rem;
 }
 
 .result-description {
-    background: #f8fafc;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin: 1.5rem 0;
+    background: var(--surface-muted);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    margin: var(--space-5) 0;
     text-align: center;
-    color: var(--dark);
+    color: var(--text);
     line-height: 1.6;
 }
 
 /* Probability bars */
 .probability-section h3 {
     font-size: 0.9rem;
-    color: var(--gray);
-    margin-bottom: 1rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-4);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 .probability-bar {
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--space-3);
 }
 
 .probability-bar .label {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 0.25rem;
+    margin-bottom: var(--space-1);
     font-size: 0.85rem;
 }
 
 .probability-bar .bar {
     height: 8px;
-    background: #e2e8f0;
+    background: var(--border);
     border-radius: 4px;
     overflow: hidden;
 }
@@ -335,17 +381,23 @@ body {
 
 /* Privacy notice */
 .privacy-notice {
-    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-    border: 1px solid #86efac;
-    border-radius: 12px;
-    padding: 1rem 1.25rem;
-    margin-top: 1.5rem;
+    background: linear-gradient(135deg, #f0fdf4 0%, var(--success-bg) 100%);
+    border: 1px solid var(--success-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) 1.25rem;
+    margin-top: var(--space-5);
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: var(--space-3);
 }
 
 .privacy-notice i {
+    color: var(--success);
+    font-size: 1.25rem;
+    margin-top: 0.125rem;
+}
+
+.privacy-notice .icon {
     color: var(--success);
     font-size: 1.25rem;
     margin-top: 0.125rem;
@@ -365,7 +417,7 @@ body {
 
 .research-banner p {
     font-size: 0.9rem;
-    color: var(--dark);
+    color: var(--text);
     line-height: 1.6;
 }
 
@@ -373,19 +425,23 @@ body {
 .source-note {
     margin-top: 1.25rem;
     padding: 0.875rem 1rem;
-    background: #f8fafc;
+    background: var(--surface-muted);
     border-radius: 10px;
     font-size: 0.8rem;
-    color: var(--gray);
+    color: var(--text-muted);
     line-height: 1.5;
 }
 
 .disclaimer-notice {
-    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-    border-color: #fcd34d;
+    background: linear-gradient(135deg, #fffbeb 0%, var(--warning-bg) 100%);
+    border-color: var(--warning-border);
 }
 
 .disclaimer-notice i {
+    color: var(--warning);
+}
+
+.disclaimer-notice .icon {
     color: var(--warning);
 }
 
@@ -397,7 +453,7 @@ body {
 .footer {
     text-align: center;
     color: rgba(255, 255, 255, 0.8);
-    margin-top: 2rem;
+    margin-top: var(--space-6);
     font-size: 0.875rem;
 }
 
@@ -414,7 +470,7 @@ body {
 .loader {
     display: none;
     text-align: center;
-    padding: 2rem;
+    padding: var(--space-6);
 }
 
 .loader.show {
@@ -424,11 +480,11 @@ body {
 .spinner {
     width: 50px;
     height: 50px;
-    border: 4px solid #e2e8f0;
+    border: 4px solid var(--border);
     border-top-color: var(--primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin: 0 auto 1rem;
+    margin: 0 auto var(--space-4);
 }
 
 @keyframes spin {
@@ -495,7 +551,7 @@ body {
     margin-top: 1rem;
     text-align: center;
     font-size: 0.8rem;
-    color: var(--gray);
+    color: var(--text-muted);
 }
 
 .shortcut-hint kbd {
@@ -503,7 +559,7 @@ body {
     padding: 0.125rem 0.375rem;
     border: 1px solid #cbd5e1;
     border-radius: 4px;
-    background: var(--light);
+    background: var(--surface-muted);
     font-family: inherit;
     font-size: 0.75rem;
 }
