@@ -138,6 +138,53 @@ generator's own authored classes.
 **Decisions.** D-024 (explicit pairing, the participant's own score, and keeping the model out of
 both the result page and the dataset).
 
+### F5 — Validation harness & honest evaluation
+
+The gate between "we have a model" and "we may say the model works".
+
+**Added**
+- `keystress/ml/splits.py` — participant-grouped splits and folds. A random split lets a model
+  score well by recognising a person across their own sessions, so whole participants go to one
+  side. A dataset with no `participant_id`, or with fewer than four participants, is **refused**
+  rather than split some other way. `assert_no_participant_leak` can be run against any split,
+  including ones produced elsewhere, because a leak makes the numbers *better* and is therefore
+  invisible in the output.
+- `keystress/ml/baselines.py` — majority, stratified, and uniform baselines, computed on every run
+  and reported beside the model. Majority-class ties break deterministically rather than by row
+  order, so a shuffled dataset cannot move the bar the model is judged against.
+- `keystress/ml/metrics.py` — per-class precision/recall/F1/support **and** how often each class
+  was predicted at all, so "the model never once predicts *high*" is visible rather than hidden
+  inside a weighted average. Macro and weighted averages sit side by side; the gap is the finding.
+  Calibration: reliability table, expected calibration error, multi-class Brier, and a
+  plain-language verdict such as "overconfident - it claims more certainty than it earns on this
+  data".
+- `keystress/ml/validation.py` — validation status derived from the model's training source and the
+  evaluation reports on disk. Three states, because "evaluated on real data and found to have no
+  skill" is a real result and must not be flattened into "never tested". No field to set by hand;
+  a synthetic run never validates; a corrupt report counts as absent.
+- `keystress/ml/evaluate.py` — the harness and its report, persisted per model version, with its
+  warnings inside the JSON. Terminal output prints them under "READ THIS BEFORE QUOTING ANY NUMBER
+  ABOVE". New `keystress-evaluate` CLI; `--data-source` is required, since only a `real` run can
+  move a model out of `not-validated`.
+- `tests/test_splits.py`, `test_baselines.py`, `test_metrics.py`, `test_evaluate.py`,
+  `test_validation_status.py` — worked examples throughout, including deliberately over- and
+  under-confident predictions, since a calibration function that reports the wrong direction is
+  worse than none.
+
+**Changed**
+- `/api/health` reports a `validation` block and `/readyz` a `validation_status`. "Ready to serve"
+  and "fit to be believed" are different claims and are no longer collapsed into one green tick.
+  Today both say `not-validated`, because that is true.
+
+**Fixed**
+- `tools/check_metric_qualifiers.py` crashed with `UnicodeEncodeError` when a violating line
+  contained a non-ASCII character (this repository's prose is full of arrows and en dashes) on a
+  cp1252 Windows console — so the check failed with a traceback *instead of naming the violation*.
+  Found by hitting it while adding the metrics above.
+
+**Decisions.** D-025 (grouped splits, mandatory baselines, three-state status, warnings in the
+report, and no plotting dependency).
+
 ### F3 — Privacy hardening & local-first defaults
 
 Defence-in-depth for the serving path, ahead of the project moving from a localhost tool toward a
