@@ -433,3 +433,18 @@ body {
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+/* Visually hidden but still read by assistive technology. Used for heading
+ * outlines and screen-reader-only labels. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
