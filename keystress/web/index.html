@@ -80,7 +80,7 @@
         <!-- Loading State -->
         <section class="card loader" id="loader-card" aria-hidden="true">
             <div class="spinner" aria-hidden="true"></div>
-            <p id="loader-message">Analyzing your typing patterns...</p>
+            <p id="loader-message" role="status">Analyzing your typing patterns...</p>
         </section>
 
         <!-- Results Card -->
@@ -140,6 +140,10 @@
                 <p><strong>Disclaimer:</strong> <span id="disclaimer-text"></span></p>
             </div>
         </section>
+
+        <!-- Screen-reader announcements. JS drops concise summaries of state
+             transitions here; content is never part of the typing signal. -->
+        <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
         </main>
 
         <footer class="footer">
