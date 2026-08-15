@@ -22,6 +22,7 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
 
+from ..core.baseline import BASELINE_WINDOW, build_baseline
 from ..core.collect import process_keystroke_data
 from ..core.consent import CONSENT_SUMMARY, CONSENT_VERSION
 from ..core.disclosure import DISCLAIMER
@@ -207,10 +208,32 @@ def donate() -> tuple[Any, int]:
 
 @bp.route("/api/data/<participant_id>")
 def view_data(participant_id: str) -> tuple[Any, int]:
-    """Return everything stored about a participant (transparency)."""
-    summary = _store().participant_summary(participant_id)
+    """
+    Return everything stored about a participant (transparency).
+
+    Since F6 this includes the *derived* personal baseline as well as the stored rows.
+    A baseline is not a row in a table — it is computed on demand from the donations
+    already shown above it — but it is still a description of the participant that the
+    system holds and acts on, and "we only show you what is literally stored" is the kind
+    of narrow reading that makes a transparency endpoint less honest than it looks. The
+    numbers are shown, not just their existence, so someone can check what "your usual
+    pace" has been taken to mean.
+    """
+    store = _store()
+    summary = store.participant_summary(participant_id)
     if summary is None:
         return _error("No data found for this identifier.", 404)
+
+    baseline = build_baseline(store.feature_history(participant_id, limit=BASELINE_WINDOW))
+    summary["personal_baseline"] = {
+        **baseline.as_payload(),
+        "centre": baseline.centre,
+        "spread": baseline.spread,
+        "note": (
+            "Derived from the sessions above, not stored separately. Deleting your data "
+            "removes it because it removes what it is computed from."
+        ),
+    }
     return jsonify(summary), 200
 
 

@@ -98,13 +98,17 @@ class PersonalBaseline:
         n_sessions: Sessions the baseline was computed from.
         centre: Median value per feature.
         spread: Scaled median absolute deviation per feature.
-        window: Maximum sessions considered.
+        window_sessions: Maximum sessions considered. Named at length rather than
+            ``window`` because ``window`` is on the project's forbidden-field list — it is
+            what a leaked *application window title* would arrive under — and a harmless
+            field wearing that name makes every content scan of this block a false
+            positive. Caught by exactly that scan.
     """
 
     n_sessions: int
     centre: dict[str, float]
     spread: dict[str, float]
-    window: int = BASELINE_WINDOW
+    window_sessions: int = BASELINE_WINDOW
 
     @property
     def is_usable(self) -> bool:
@@ -117,14 +121,14 @@ class PersonalBaseline:
             "n_sessions": self.n_sessions,
             "sessions_needed": max(0, MIN_BASELINE_SESSIONS - self.n_sessions),
             "usable": self.is_usable,
-            "window": self.window,
+            "window_sessions": self.window_sessions,
         }
 
 
 def build_baseline(
     sessions: Sequence[dict[str, Any]],
     *,
-    window: int = BASELINE_WINDOW,
+    window_sessions: int = BASELINE_WINDOW,
 ) -> PersonalBaseline:
     """
     Build a baseline from a participant's stored feature rows.
@@ -132,17 +136,19 @@ def build_baseline(
     Parameters:
         sessions: Feature dictionaries, newest first (the order
             :meth:`keystress.core.storage.Store.list_donations` returns).
-        window: Maximum number of recent sessions to use.
+        window_sessions: Maximum number of recent sessions to use.
 
     Returns:
         PersonalBaseline: The participant's norm. A baseline built from too few sessions
         is still returned — with ``is_usable`` false — because "you have 2 of 5 sessions"
         is more useful to a person than an error.
     """
-    recent = list(sessions)[:window]
+    recent = list(sessions)[:window_sessions]
 
     if not recent:
-        return PersonalBaseline(n_sessions=0, centre={}, spread={}, window=window)
+        return PersonalBaseline(
+            n_sessions=0, centre={}, spread={}, window_sessions=window_sessions
+        )
 
     centre: dict[str, float] = {}
     spread: dict[str, float] = {}
@@ -156,7 +162,7 @@ def build_baseline(
         spread[name] = float(np.median(np.abs(values - median)) * MAD_TO_SIGMA)
 
     return PersonalBaseline(
-        n_sessions=len(recent), centre=centre, spread=spread, window=window
+        n_sessions=len(recent), centre=centre, spread=spread, window_sessions=window_sessions
     )
 
 

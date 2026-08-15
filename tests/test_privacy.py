@@ -565,6 +565,67 @@ class TestResearchPathDiscardsContent:
                     )
 
 
+class TestPersonalBaselineDiscardsContent:
+    """
+    The derived personal baseline is content-free (F6).
+
+    A baseline is computed from stored feature rows, so it inherits their guarantee — but
+    it is also the first *derived profile* the system keeps about a person, and it now
+    appears in two responses. Both are checked directly rather than argued from the
+    inputs.
+    """
+
+    def _donor_with_history(self, client) -> str:
+        participant_id = client.post(
+            "/api/consent", json={"analysis": True, "donate": True}
+        ).get_json()["participant_id"]
+        for _ in range(6):
+            response = client.post(
+                "/api/donate",
+                json={"keystroke_events": hostile_events()},
+                headers={"X-Consent-Id": participant_id},
+            )
+            assert response.status_code == 201
+        return participant_id
+
+    def test_the_prediction_baseline_block_is_content_free(self, client) -> None:
+        participant_id = self._donor_with_history(client)
+        body = client.post(
+            "/api/predict",
+            json={"keystroke_events": hostile_events()},
+            headers={"X-Consent-Id": participant_id},
+        ).get_json()
+
+        assert_no_content(body.get("personal"), "personal baseline block")
+
+    def test_the_transparency_baseline_is_content_free(self, client) -> None:
+        participant_id = self._donor_with_history(client)
+        body = client.get(f"/api/data/{participant_id}").get_json()
+
+        assert_no_content(body["personal_baseline"], "derived baseline")
+
+    def test_the_baseline_holds_only_the_v1_features(self, client) -> None:
+        """
+        A baseline is one number per feature per statistic. Anything else appearing here
+        would be a new thing being remembered about a person.
+        """
+        participant_id = self._donor_with_history(client)
+        baseline = client.get(f"/api/data/{participant_id}").get_json()["personal_baseline"]
+
+        assert set(baseline["centre"]) == set(FEATURES_V1)
+        assert set(baseline["spread"]) == set(FEATURES_V1)
+
+    def test_baseline_source_reads_no_content_bearing_field(self) -> None:
+        from keystress.core import baseline as baseline_module
+
+        code = Path(baseline_module.__file__).read_text(encoding="utf-8")
+        for name in ("key", "char", "code", "keyCode", "which", "text", "clipboard"):
+            for pattern in (f'["{name}"]', f"['{name}']", f'.get("{name}"', f".get('{name}'"):
+                assert pattern not in code, (
+                    f"baseline reads content-bearing field via {pattern}"
+                )
+
+
 class TestSuiteIntegrity:
     """
     Guard the guard.
@@ -576,7 +637,7 @@ class TestSuiteIntegrity:
 
     #: Floor on the number of privacy assertions. Raise it when tests are added; lowering
     #: it should require explaining which guarantee is being given up.
-    MINIMUM_PRIVACY_TESTS = 36
+    MINIMUM_PRIVACY_TESTS = 40
 
     def test_suite_has_not_been_emptied(self) -> None:
         import sys

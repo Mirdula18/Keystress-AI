@@ -78,7 +78,7 @@ class TestBuildingABaseline:
     def test_only_the_window_of_recent_sessions_is_used(self) -> None:
         """A baseline should track a person as they change, not average their whole past."""
         history = [session(speed=4.0)] * 3 + [session(speed=100.0)] * 20
-        baseline = build_baseline(history, window=3)
+        baseline = build_baseline(history, window_sessions=3)
 
         assert baseline.n_sessions == 3
         assert baseline.centre["avg_typing_speed"] == 4.0
