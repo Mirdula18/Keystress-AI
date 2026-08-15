@@ -721,3 +721,54 @@ should reuse `calibration_metrics` rather than adding a second definition. F6's 
 change what a "session" means for grouping, and must revisit `splits.py` rather than assume it
 still applies. Any future claim about performance is expected to cite a report id — which is why
 the report is written per model version, and why model versions are deterministic (D-017).
+
+---
+
+## D-026 — F6 stops one step short of its own goal: a personal baseline describes typing, not wellbeing
+
+**Phase 2 · `feat/F6-personal-baseline`**
+
+**Context.** `FEATURES.md` F6 states the goal as "score burnout as deviation from a user's own
+typing norm". The reasoning behind it is sound and is the strongest methodological idea in the
+roadmap: between-person variation swamps any burnout signal, because people type at wildly
+different speeds for reasons — keyboard, language, practice, injury — that have nothing to do with
+wellbeing. Within-person change is the plausible signal and the more private one.
+
+**Decision.** Build the personal baseline, and **do not turn a deviation into a burnout score.**
+The response block reports what changed in someone's typing relative to their own recent sessions,
+in plain language, with a note stating that no link between such changes and burnout has been
+established. Four supporting choices:
+
+- **Median and scaled MAD, not mean and standard deviation.** A baseline may rest on five
+  sessions, and an interrupted one is not a rare event in this data. A mean lets a single bad
+  session redefine a person's "normal", and the standard deviation it inflates then masks every
+  genuine change afterwards. Both properties are tested with an explicit outlier.
+
+- **Five sessions before any number is produced, and `deviation_from` raises below it.** The
+  cold-start state is a plain "2 of 5 sessions stored", which is more use to a person than either
+  an error or a confident guess. Five is a judgement, not a derivation — recorded as a named
+  constant because the honest value is an empirical question the F4 dataset can answer.
+
+- **No block at all for an analysis-only participant**, rather than a cold-start block. A "0 of 5"
+  progress meter shown to someone who has deliberately stored nothing reads as a nudge to opt in,
+  on a page whose entire design is that opting in is genuinely optional.
+
+- **The derived baseline appears in `GET /api/data/<id>`.** It is not a stored row, but it is a
+  description of the participant the system holds and acts on, and a transparency endpoint that
+  shows only literal rows is less honest than it looks.
+
+**Rationale.** Converting "0.8 robust deviations slower than your own median" into "elevated
+burnout risk" is one line of code and would satisfy the feature's stated goal. It would also
+invent the validated relationship this project does not have, in the one place a participant is
+most likely to believe it — a number about *them*, computed from *their* history, which feels far
+more personal and therefore more credible than a population model's guess. HARD RULE 2 and 3 do
+not have an exception for a metric that feels bespoke.
+
+**Consequences.** F6's stated goal is deliberately only half-delivered, and the roadmap entry says
+so. The other half unlocks when F5 reports that deviation predicts the F4 self-report label — at
+which point the mapping belongs in one place (the baseline block gains a validated interpretation)
+rather than being reinvented at each call site. F17's trends dashboard should build on
+`build_baseline` rather than compute its own statistics, and inherits the same restraint: a trend
+line of deviations is still a description of typing. F8 changing the feature set changes what a
+stored baseline means, so a feature-set version bump must invalidate history from an earlier set
+rather than pooling the two.

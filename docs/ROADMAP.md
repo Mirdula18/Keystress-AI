@@ -75,7 +75,11 @@ alongside trivial baselines. *This is the version that can be presented with int
 
 ## Phase 2 — Make the science better (not just bigger)
 
-- [ ] **F6 — Per-user baseline & personalization** (deviation-from-own-norm; cold-start abstention).
+- [x] **F6 — Per-user baseline & personalization.** *Deviation from a participant's own median,
+      measured robustly (median/MAD) so one bad session cannot redefine their normal, with an
+      honest "2 of 5 sessions" cold-start state. Stops short of scoring burnout from the
+      deviation: that link is exactly what F5 has not yet established (D-026). See `CHANGELOG.md`
+      F6.*
 - [ ] **F7 — Confidence calibration & abstention.**
 - [ ] **F8 — Feature-set expansion & versioning** (selected by measured lift on real data).
 - [ ] **F9 — Drift & fairness monitoring** (subgroup metrics; disparity flags).
