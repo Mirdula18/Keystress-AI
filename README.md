@@ -4,7 +4,7 @@
 wellbeing** — analyzing typing *rhythm* (speed, pauses, corrections) while never capturing the
 characters typed. Original work by Mirdula R.
 
-- **License:** MIT · **Stack:** Python · Flask · scikit-learn
+
 
 > ⚠️ **Not a diagnostic tool.** Keystress-AI produces *research indicators*, not medical or
 > clinical assessments. The current model is trained on **synthetic data**, so reported accuracy
