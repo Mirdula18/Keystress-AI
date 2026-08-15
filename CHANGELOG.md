@@ -185,6 +185,45 @@ The gate between "we have a model" and "we may say the model works".
 **Decisions.** D-025 (grouped splits, mandatory baselines, three-state status, warnings in the
 report, and no plotting dependency).
 
+### F6 — Per-user baseline & personalisation
+
+Compares a session with the participant's **own** previous sessions instead of with a population.
+Between-person variation swamps any burnout signal — a fast typist having their worst week still
+out-types a slow typist at their best — so a population comparison mostly measures who someone is.
+
+**Added**
+- `keystress/core/baseline.py` — a personal norm built from a participant's own donated feature
+  rows: median centre, scaled median-absolute-deviation spread, robust z-scores, and plain-language
+  descriptions ("slower than your usual pace", "more corrections than usual"). Median and MAD
+  rather than mean and standard deviation because a baseline may rest on five sessions, where one
+  interrupted night would otherwise redefine the person's normal *and* inflate the spread enough to
+  mask every later change.
+- `Store.feature_history` — the requesting participant's rows, newest first, windowed so a baseline
+  tracks a person as they change rather than averaging their whole past.
+- A `personal` block on `/api/predict`, added additively so the F1 disclosure fields are untouched,
+  and a note on the results card showing what changed with the caveat directly beneath it.
+- `GET /api/data/<id>` now returns the **derived** baseline — the per-feature centre and spread, not
+  just the fact one exists — so a participant can check what "your usual pace" has been taken to
+  mean. It is deleted with their data because it is computed from it.
+- `tests/test_baseline.py`, `tests/test_baseline_api.py`, and four privacy tests covering the first
+  derived profile the project keeps about a person.
+
+**Deliberately not included**
+- **A burnout score from the deviation.** F6's stated goal is to score burnout as deviation from
+  the personal norm; this delivers the deviation and stops there. No link between such changes and
+  wellbeing has been established — F5 is the test that could establish it — and a number computed
+  from someone's own history is exactly where an unfounded claim would be most readily believed
+  (D-026).
+- No block at all for a participant who stores nothing, rather than a cold-start progress meter,
+  which would read as a nudge to opt in.
+
+**Changed**
+- The baseline payload field `window` became `window_sessions`: `window` is on the forbidden-field
+  list, since it is what a leaked application window title would arrive under. Caught by the
+  privacy scan the same commit added.
+
+**Decisions.** D-026 (why the deviation stays a description of typing).
+
 ### F3 — Privacy hardening & local-first defaults
 
 Defence-in-depth for the serving path, ahead of the project moving from a localhost tool toward a

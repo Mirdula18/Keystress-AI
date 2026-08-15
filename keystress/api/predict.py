@@ -13,6 +13,7 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
 
+from ..core.baseline import BASELINE_WINDOW, build_baseline, personal_summary
 from ..core.collect import process_keystroke_data
 from ..core.features import extract_typing_features
 from ..core.inference import get_prediction_details
@@ -147,4 +148,53 @@ def api_predict() -> tuple[Any, int]:
         )
 
     result["level_class"] = LEVEL_CLASSES.get(result["prediction"], "unknown")
+
+    # F6: how this session compares with the participant's *own* previous sessions. Added
+    # additively (CLAUDE.md §5) and only when there is history to compare against, which
+    # requires the donate opt-in — a baseline needs stored sessions, and nothing is stored
+    # without one.
+    personal = _personal_block(_consent_id(payload), features)
+    if personal is not None:
+        result["personal"] = personal
+
     return jsonify(result), 200
+
+
+def _consent_id(payload: Any) -> str | None:
+    """Extract the participant token from the header, falling back to the body."""
+    consent_id = request.headers.get("X-Consent-Id")
+    if not consent_id and isinstance(payload, dict):
+        consent_id = payload.get("consent_id")
+    return consent_id.strip() if isinstance(consent_id, str) and consent_id.strip() else None
+
+
+def _personal_block(consent_id: str | None, features: dict[str, float]) -> dict[str, Any] | None:
+    """
+    Build the personal-baseline block for a session, or ``None`` when there can be none.
+
+    ``None`` rather than an empty block for the two cases where a baseline is not merely
+    unavailable but *inapplicable*: no participant token, or a participant who has not
+    opted into storage and therefore has no history by their own choice. Sending a
+    cold-start block to someone who has deliberately stored nothing would read as a nudge
+    to opt in, on a page whose whole design is that opting in is genuinely optional.
+
+    Parameters:
+        consent_id: The participant token, if the request carried one.
+        features: This session's features.
+
+    Returns:
+        dict | None: The block from :func:`keystress.core.baseline.personal_summary`.
+    """
+    if not consent_id:
+        return None
+
+    store = current_app.extensions.get("keystress_store")
+    if store is None or not store.has_donate_consent(consent_id):
+        return None
+
+    # The history read here is the participant's previous sessions only: this one is not
+    # donated until the client calls /api/donate, so a session is never compared with a
+    # baseline it is itself part of.
+    history = store.feature_history(consent_id, limit=BASELINE_WINDOW)
+    baseline = build_baseline(history)
+    return personal_summary(baseline, features)

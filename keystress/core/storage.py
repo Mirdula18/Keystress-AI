@@ -278,6 +278,39 @@ class Store:
             for row in rows
         ]
 
+    def feature_history(
+        self,
+        participant_id: str,
+        *,
+        limit: int = 30,
+    ) -> list[dict[str, float]]:
+        """
+        Return a participant's own past feature rows, newest first (F6).
+
+        This is the input to :func:`keystress.core.baseline.build_baseline`. It reads only
+        the requesting participant's rows: a personal baseline is built from one person's
+        history and is meaningless to anyone else, which is a large part of why comparing
+        someone against themselves is more private than comparing them against a
+        population.
+
+        Parameters:
+            participant_id: Whose history to read.
+            limit: Maximum rows, newest first. A baseline tracks a person as they change
+                rather than averaging their whole past, so old rows are simply not read.
+
+        Returns:
+            list[dict]: Feature dictionaries, newest first. Empty for an unknown
+            participant or one who has donated nothing - which is the cold-start state,
+            not an error.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT features_json FROM donations WHERE participant_id = ? "
+                "ORDER BY id DESC LIMIT ?",
+                (participant_id, int(limit)),
+            ).fetchall()
+        return [json.loads(row["features_json"]) for row in rows]
+
     # -- questionnaire responses (F4) ------------------------------------------------
 
     def save_response(
