@@ -720,6 +720,7 @@ function displayResults(result) {
         sourceNote.textContent =
             'No indicator was produced, so there is no number to report. '
             + 'Model ' + modelVersion + ' (trained ' + qualifier + ').';
+        showPersonalNote(result.personal);
         announce(result.label + '. ' + result.description);
         return;
     }
@@ -764,6 +765,8 @@ function displayResults(result) {
               + '- not any demonstrated ability to detect real burnout.'
             : '');
 
+    showPersonalNote(result.personal);
+
     // The announcement carries the same qualifier the page shows, so a screen-reader
     // user is never told a bare number either.
     announce('Result: ' + result.label + '. Model confidence '
@@ -771,6 +774,31 @@ function displayResults(result) {
 
     donateSession();
     showQuestionnaire();
+}
+
+// -------------------------------------------------------------------------------------
+// Your own normal (F6)
+//
+// A comparison with the participant's own previous sessions. It is deliberately not a
+// second verdict sitting beside the model's: it describes what changed in the typing, and
+// the caveat under it says plainly that no link between such changes and burnout has been
+// established. Absent for anyone who does not store their sessions, since there is then
+// no history to compare against.
+// -------------------------------------------------------------------------------------
+
+function showPersonalNote(personal) {
+    const note = document.getElementById('personal-note');
+
+    if (!personal) {
+        note.classList.add('is-hidden');
+        return;
+    }
+
+    document.getElementById('personal-summary').textContent = personal.summary;
+    // Shown in the cold-start state too: someone reading "3 of 5 sessions stored" should
+    // already know what the finished thing will and will not tell them.
+    document.getElementById('personal-caveat').textContent = personal.interpretation_note;
+    note.classList.remove('is-hidden');
 }
 
 function newTest() {

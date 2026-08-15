@@ -211,3 +211,51 @@ class TestNoWellbeingClaim:
         assert "prediction" in body
         assert "prediction" not in body["personal"]
         assert "confidence" not in body["personal"]
+
+
+class TestPageRendering:
+    """The results card shows the comparison, and its caveat with it."""
+
+    @pytest.mark.parametrize("element_id", [
+        "personal-note", "personal-summary", "personal-caveat",
+    ])
+    def test_the_elements_exist(self, client, element_id: str) -> None:
+        assert f'id="{element_id}"' in client.get("/").get_data(as_text=True)
+
+    def test_the_note_starts_hidden(self, client) -> None:
+        body = client.get("/").get_data(as_text=True)
+        marker = body.index('id="personal-note"')
+        assert "is-hidden" in body[body.rindex("<div", 0, marker):marker]
+
+    def test_the_script_renders_summary_and_caveat_together(self) -> None:
+        """
+        The caveat is what stops a comparison being read as a verdict, so it is rendered
+        in the same function as the summary rather than left to a separate call that
+        could be forgotten.
+        """
+        from pathlib import Path
+
+        script = Path("keystress/web/static/app.js").read_text(encoding="utf-8")
+        block = script[script.index("function showPersonalNote("):]
+        block = block[:block.index("\n}")]
+
+        assert "personal.summary" in block
+        assert "personal.interpretation_note" in block
+
+    def test_an_absent_block_hides_the_note(self) -> None:
+        from pathlib import Path
+
+        script = Path("keystress/web/static/app.js").read_text(encoding="utf-8")
+        block = script[script.index("function showPersonalNote("):]
+        block = block[:block.index("\n}")]
+        assert "if (!personal)" in block
+
+    def test_the_page_renders_no_personal_verdict(self) -> None:
+        """The note may show what changed; it may not show a level, score, or risk."""
+        from pathlib import Path
+
+        script = Path("keystress/web/static/app.js").read_text(encoding="utf-8")
+        block = script[script.index("function showPersonalNote("):]
+        block = block[:block.index("\n}")]
+        for forbidden in ("level_class", "confidence", "probabilities", "prediction"):
+            assert forbidden not in block
